@@ -1,0 +1,72 @@
+# Load Balancer vs API Gateway
+
+1. 
+
+[https://www.youtube.com/watch?v=_ErhwTPSpws](https://www.youtube.com/watch?v=_ErhwTPSpws)
+
+- Both load balancers and API gateways act as reverse proxies that sit between clients and backend services, but they solve different primary problems in cloud-native architectures.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Load balancers focus on reliability, availability, and scalability by distributing incoming traffic across multiple backend instances so no single server is overwhelmed, and they perform health checks to route around unhealthy instances.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- There are two main types of load balancers discussed:
+    - Network Load Balancer (NLB): Works at layer 4 (transport), optimized for ultra-low latency and high throughput; good for real-time workloads like gaming or trading.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Application Load Balancer (ALB): Works at layer 7 (application), supports content-based routing using paths, headers, etc.; ideal for web and microservices architectures.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Popular load balancer implementations mentioned include AWS Elastic Load Balancer, Google Cloud Load Balancing, Nginx, and HAProxy.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- API gateways act as the centralized entry point for APIs, routing requests to the correct backend services and providing API-specific features such as:
+    - Authentication and authorization.
+    - Rate limiting and throttling to protect services.
+    - Request and response transformations (headers, paths, payload formats) to ensure compatibility between clients and services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Common API gateway products mentioned include AWS API Gateway, Kong, and Google Apigee.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Both load balancers and API gateways:
+    - Distribute incoming traffic and prevent any single server from being overloaded.
+    - Support request routing, but with different bases: load balancers often use IP/port, while gateways use endpoints and headers.
+    - Contribute to fault tolerance by detecting unhealthy backends and rerouting traffic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Key conceptual difference:
+    - Load balancer = raw traffic distribution layer, concerned with network-level availability and scaling.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - API gateway = API management layer, concerned with the full lifecycle of an API call (security, policies, transformations, routing between microservices).[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- A simple rule to remember: load balancers help servers survive traffic, API gateways help APIs behave correctly and securely under traffic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- One major pattern covered is “Load Balancer in front, API Gateway behind”:
+    - Flow: Client → Load Balancer (e.g., ALB) → API Gateway → Backend services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Load balancer handles SSL termination, distributes traffic across multiple gateway instances, and can integrate with protections like DDoS mitigation or WAF.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - API gateway then applies API concerns: auth, rate limiting, routing to the right service.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - This pattern is useful when you need to scale the gateway layer itself and centralize public entry via a single domain while offloading heavy TLS work.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Another pattern is “API Gateway first, internal load balancers behind”:
+    - Flow: Client → API Gateway → Internal load balancers → Backend clusters (Kubernetes, ECS, private VPCs, etc.).[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Gateway is the frontline: performs authentication, validation, and policy enforcement before anything reaches internal networks.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Internal load balancers then handle cluster- or service-specific load balancing configs, potentially across isolated networks.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - This is ideal for microservices setups where you want strong client-facing control at the gateway and flexible per-cluster balancing behind it.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- There is also a pattern that combines CDN with load balancer and API gateway:
+    - Flow: Client → CDN (Cloudflare, CloudFront, etc.) → Load Balancer → API Gateway → Backend services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - CDN caches static assets (images, CSS, some pages) at the edge to reduce latency and offload traffic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Non-cacheable requests go to the load balancer, then to the gateway for API-specific logic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - This pattern boosts global performance while keeping centralized API control.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- The video notes that some API gateways come with built-in load balancing:
+    - Examples: Kong, Nginx (as gateway), Apigee support internal load balancing to backend services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - In such cases, a separate external load balancer may be unnecessary for smaller or simpler setups, reducing infrastructure complexity.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- An advanced multi-tier architecture pattern is presented:
+    - Flow: Client → Network Load Balancer (L4) → API Gateway → Application Load Balancer (L7) → Backend services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - NLB provides ultra-low latency and high throughput at the transport layer but limited routing logic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - API gateway enforces security, transformations, and API policies.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - ALB then performs rich content-based routing (paths, headers, content types) to individual services.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - This cleanly separates concerns between pure network performance, API policy, and application-level routing.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Guidelines on when to choose which arrangement:
+    - Choose “API Gateway first” when:
+        - You need authentication, authorization, and rate limiting as early as possible.
+        - You want API-level decisions before traffic reaches internal systems.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Choose “Load Balancer first” when:
+        - Global traffic management, SSL termination, or DDoS/WAF protection must happen before any API logic.
+        - You want to hide or protect the gateway behind a more general edge layer.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - Choose “multiple tiers of load balancers” for:
+        - Multi-region or multi-cluster deployments where routing rules are complex and specialized.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- The video briefly mentions service mesh for internal microservice-to-microservice traffic:
+    - Service meshes like Istio or Linkerd provide advanced traffic management, retries, and observability inside the network.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - They complement gateways and load balancers by handling east–west traffic, while gateways/load balancers typically manage north–south traffic.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- Conceptually, this supports the mental model from your past system-design prep:
+    - Edge/CDN and/or L4 LB for global entry,
+    - API gateway for cross-cutting API concerns,
+    - ALB or internal LBs for per-service routing,
+    - And service mesh for intra-cluster traffic, especially in microservices-heavy Kubernetes/ECS setups.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+- For your future doubts and quick refresh:
+    - If the question is “Can an API Gateway replace a Load Balancer?” → Sometimes yes for small systems (because gateways can load balance), but in high-scale or complex architectures they typically complement each other, with different layers handling different responsibilities.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)
+    - If the question is “Where to place what?” → Ask:
+        - Do I need network-level protections and global routing first? Then put LB/CDN at the edge.
+        - Do I need early auth/quotas per API? Then put gateway as close to the client edge as possible.
+        - Do I have multiple backend clusters or isolated networks? Then add internal LBs behind the gateway.[youtube](https://www.youtube.com/watch?v=_ErhwTPSpws)

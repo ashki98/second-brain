@@ -1,0 +1,19 @@
+# Work notes (excluded from public repo)
+raw/vault/Work/
+
+# Obsidian workspace files
+.obsidian/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Obsidian untitled scratch files
+Untitled.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# misc_scripts (one-off migration scripts)
+misc_scripts/

