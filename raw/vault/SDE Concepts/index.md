@@ -115,7 +115,7 @@ Last updated: 2026-05-31
 | File | Key topics |
 |---|---|
 | CDN Concepts & AWS CloudFront Developer Flow.md | CDN PoPs, DNS vs Anycast routing, TLS termination at edge, CloudFront+S3 workflow, cache invalidation strategies |
-| CQRS.md | Event Sourcing, sourcing/hydration/replay, snapshots, materialized views, CQRS architecture (command vs query side), event propagation |
+| CQRS.md | Event Sourcing, sourcing/hydration/replay, snapshots, materialized views, CQRS architecture (command vs query side), event propagation, industry use cases (e-commerce, finance, ride-sharing, healthcare, SaaS, gaming), when to adopt |
 | Docker Container vs Registry.md | Container vs VM, image/container/registry, Docker Compose |
 | GRPC.md | (Empty file — covered by RPC.md context) gRPC vs REST, Protobuf binary, HTTP/2 multiplexing, 4 streaming modes |
 | Github Gitlab CI CD.md | YAML pipelines, GitLab CI stages, Terraform plan+apply, secure variables, Jenkins vs GH vs GitLab |

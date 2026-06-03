@@ -55,3 +55,45 @@ Event Sourcing in this video is presented as a way to turn application state int
 
 - Event propagation is the process of distributing events from the command side to all interested components/services that need to react, often via message brokers like Kafka, RabbitMQ, or AWS SNS.
 - The query side typically subscribes to these topics or directly to the event store (e.g., EventStoreDB), processes new events to update read models, and can rebuild them from scratch by replaying the full event history if corruption or schema changes occur.
+
+---
+
+## Industry use cases
+
+CQRS (usually paired with Event Sourcing) is adopted when at least one of these conditions is true: read/write traffic is asymmetric, audit trails are a compliance requirement, multiple read models are needed from the same data, or write-side business rules are complex while reads are simple.
+
+### E-commerce (Amazon, Shopify)
+- Write side handles `PlaceOrder`, `UpdateInventory`, `ApplyDiscount` — strict transactional logic with business rule validation.
+- Read side serves product catalog pages, search results, and order history from denormalized materialized views optimized for query speed.
+- Inventory reads tolerate slight staleness (eventual consistency is fine for "in stock" labels); writes are strongly consistent.
+
+### Financial systems (banks, trading platforms)
+- Every transaction is an immutable event: `MoneyDebited`, `MoneyCredited`, `TransferReversed`.
+- Command side validates rules ("sufficient balance?"); query side serves account statements, balances, and reporting dashboards from pre-built read models.
+- The audit trail requirement is the primary driver — Event Sourcing gives a legally defensible record of every state change.
+
+### Ride-sharing and logistics (Uber, Lyft)
+- Commands: `RequestRide`, `AcceptRide`, `CompleteTrip`
+- Read side: driver location dashboards, trip history, surge pricing views — each a separate materialized view optimized per use case.
+- Read traffic is 10–100x write traffic, so scaling the query side independently (the core CQRS benefit) is critical.
+
+### Healthcare records
+- Compliance requires a full audit trail by law — same driver as finance.
+- Snapshots are essential: replaying 10 years of patient events on every chart load is too slow; a periodic snapshot captures current state so only recent events are replayed.
+
+### SaaS analytics and reporting (Salesforce, HubSpot)
+- Write side handles CRM updates (pipeline stage changes, deal closes); read side maintains pre-aggregated dashboards (deals by stage, revenue by rep) as materialized views.
+- Without CQRS, a single DB would handle both OLTP writes and OLAP-style reads, degrading both.
+
+### Gaming (leaderboards, matchmaking)
+- Commands: `SubmitScore`, `CompleteMatch`
+- Read side: leaderboards as materialized views, refreshed incrementally as events arrive — same pattern as `PriceUpdated` but at massive fan-out scale.
+
+### When to adopt
+
+| Condition | Example |
+|---|---|
+| Read/write ratio is highly asymmetric | E-commerce catalog vs. orders |
+| Audit trail is a compliance requirement | Finance, healthcare |
+| Multiple read models needed from same data | SaaS dashboards |
+| Write rules are complex, reads are simple | Trading platforms |

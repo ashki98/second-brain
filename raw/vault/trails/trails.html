@@ -1981,6 +1981,19 @@ Replay 1-2 → price=110 ✓</pre></div>
   <li>Perfect audit trail — who changed what, when, to what value, forever</li>
   <li>Materialized views updated incrementally as events arrive</li>
 </ul>
+<h3>Industry Use Cases</h3>
+<table>
+  <thead><tr><th>Industry</th><th>Commands (write side)</th><th>Read side materialized views</th><th>Primary driver</th></tr></thead>
+  <tbody>
+    <tr><td>E-commerce</td><td>PlaceOrder, UpdateInventory</td><td>Catalog pages, order history</td><td>Asymmetric read/write traffic</td></tr>
+    <tr><td>Finance / Banking</td><td>MoneyDebited, TransferReversed</td><td>Balances, statements, dashboards</td><td>Audit trail compliance</td></tr>
+    <tr><td>Ride-sharing</td><td>RequestRide, CompleteTrip</td><td>Driver locations, surge pricing</td><td>100x more reads than writes</td></tr>
+    <tr><td>Healthcare</td><td>RecordVisit, PrescribeMed</td><td>Patient chart (snapshot-backed)</td><td>Legal audit requirement</td></tr>
+    <tr><td>SaaS / CRM</td><td>CloseDeal, UpdatePipeline</td><td>Revenue dashboards, deal views</td><td>Multiple read models from one stream</td></tr>
+    <tr><td>Gaming</td><td>SubmitScore, CompleteMatch</td><td>Leaderboards, player history</td><td>High fan-out, fast reads</td></tr>
+  </tbody>
+</table>
+<div class="info">Adopt CQRS when: read/write traffic is asymmetric, audit trails are required by compliance, multiple read models are needed from the same data, or write business rules are complex while reads are simple.</div>
 </template>
 
 <template id="node-05-07" data-type="node" data-trail="trail-05" data-order="7"
