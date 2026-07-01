@@ -1,7 +1,7 @@
 # SDE Concepts — Index
 
 Claude's quick-reference TOC. Use this to locate notes before reading full files.
-Last updated: 2026-05-31
+Last updated: 2026-06-24
 
 ---
 
@@ -71,6 +71,7 @@ Last updated: 2026-05-31
 |---|---|
 | Part 1 Foundation of data systems.md | Reliability/Scalability/Maintainability, relational vs document model, normalisation, SQL declarative, OLTP vs OLAP, column-oriented + bitmap, Protobuf/Thrift/Avro |
 | Replication.md | Single-leader, sync vs async, semi-sync, failover risks (split brain, lost writes, GitHub incident), replication lag anomalies (read-your-writes/monotonic/consistent prefix), multi-leader conflicts, leaderless/Dynamo, quorum w+r>n, sloppy quorum, hinted handoff, version vectors |
+| Transactions.md | ACID (atomicity/consistency/isolation/durability), read committed, snapshot isolation, MVCC, lost updates, write skew, phantoms, serial execution, two-phase locking (2PL), predicate locks, index-range locks, serializable snapshot isolation (SSI) |
 
 ### Redis/
 | File | Key topics |
@@ -110,6 +111,10 @@ Last updated: 2026-05-31
 | AI Agents.md | Monolithic → Compound AI → Agents, reasoning/acting/memory, ReAct pattern, autonomy slider |
 | MCP.md | Client-server design, resources/tools/prompts, LLM in client not server, vending machine analogy, JSON-RPC 2.0 |
 | Langgraph Flow.md | Why LangGraph (vs while loop), StateGraph/nodes/edges/state, ToolNode, compile(), 6-level roadmap, streaming/checkpointing/human-in-the-loop |
+| Transformer Internals & GPT-3 Parameter Count.md | Pipeline (embed→layers→unembed), residual stream, attention Q/K/V + causal masking + multi-head, MLP up/down projection + fact storage, full 175B param table, backprop note |
+| Distillation & Quantization.md | Distillation (soft targets, classic vs data/task flavors, ToS), quantization (bucket+scale, precision ladder FP32→INT4, PTQ vs QAT, outliers/GPTQ/AWQ), the two as orthogonal levers |
+| LLM Inference - Autoregressive Generation, KV Cache & GPUs.md | Autoregressive decode, KV cache (why K/V not Q, why not e+, per-layer caches, grid view), prefill vs decode (TTFT/TPS), CPU vs GPU, VRAM capacity vs bandwidth |
+| Serving LLMs in Production - Batching, Engines & Economics.md | Batching (weights amortize, KV don't), static vs continuous batching, serving engine = DB engine analogy, vLLM/PagedAttention, VRAM budget math, GPU landscape, tensor/pipeline parallelism, MoE |
 
 ### Root level
 | File | Key topics |
@@ -219,6 +224,10 @@ Last updated: 2026-05-31
 - MCP protocol → `AI-ML/MCP.md`
 - LangGraph → `AI-ML/Langgraph Flow.md`
 - Software 1.0/2.0/3.0 (Karpathy) → `Software Is Changing (Again) by Andrej Karpathy.md`
+- Transformer internals, attention/MLP, GPT-3 175B param count → `AI-ML/Transformer Internals & GPT-3 Parameter Count.md`
+- Distillation (soft targets, flavors) + quantization (precision ladder, PTQ/QAT) → `AI-ML/Distillation & Quantization.md`
+- Autoregressive decode, KV cache, prefill vs decode, GPUs/VRAM → `AI-ML/LLM Inference - Autoregressive Generation, KV Cache & GPUs.md`
+- Batching, continuous batching, PagedAttention, vLLM, VRAM math, GPU landscape → `AI-ML/Serving LLMs in Production - Batching, Engines & Economics.md`
 
 ### Python Specifics
 - Memory management, reference counting → `Python/Memory Allocation and Management in Python.md`

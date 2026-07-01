@@ -2452,7 +2452,7 @@ Minimal CPU ✓</pre></div>
 <template id="node-06-09" data-type="node" data-trail="trail-06" data-order="9"
   data-title="TCP Echo Server Implementation"
   data-file="Redis/TCP Echo Server Implementation.md"
-  data-bridge="">
+  data-bridge="The TCP echo server made the single-threaded blocking model concrete — Redis sidesteps concurrency by processing one command at a time on a single event loop. Traditional relational databases take the opposite approach: they serve concurrent clients, which forces them to coordinate conflicting reads and writes through transactions. This node covers the full machinery — ACID guarantees, isolation levels from read committed to serializable, and the three implementation strategies for achieving true serializability.">
 <h3>The Blocking Bottleneck</h3>
 <pre>
   func main() {
@@ -3663,7 +3663,7 @@ Flow IS the structure ✓</pre></div>
 <template id="node-12-06" data-type="node" data-trail="trail-12" data-order="6"
   data-title="Software Is Changing (Again) — Karpathy"
   data-file="Software Is Changing (Again) by Andrej Karpathy.md"
-  data-bridge="">
+  data-bridge="Karpathy frames LLMs as a new computing substrate — but to wield them you need to know what's inside the box. The next nodes open it up: how a transformer actually turns tokens into predictions, then how those models are compressed and served in production.">
 <h3>Three Eras of Software</h3>
 <table>
   <thead><tr><th>Era</th><th>How software is created</th><th>Example</th></tr></thead>
@@ -3718,6 +3718,562 @@ Flow IS the structure ✓</pre></div>
     <div id="trail-view"><div class="empty-state">← Select a trail to begin</div></div>
   </main>
 </div>
+
+<template id="node-06-10" data-type="node" data-trail="trail-06" data-order="10"
+  data-title="DDIA Transactions"
+  data-file="DDIA/Transactions.md"
+  data-bridge="">
+
+<h3>Why Transactions Exist</h3>
+<p>A <strong>transaction</strong> groups reads and writes into a logical unit: either everything succeeds (commit) or everything is undone (abort/rollback). They simplify error handling when hardware fails mid-write, apps crash mid-op, networks cut connections, or concurrent clients overwrite each other.</p>
+<div class="warn">Transactions are a design choice, not a requirement. Without them, every failure path and concurrency edge case must be handled entirely by the application.</div>
+
+<h3>ACID</h3>
+<table>
+  <thead><tr><th>Letter</th><th>What it actually means</th><th>Responsible</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Atomicity</strong></td><td>All-or-nothing. Fault mid-txn → all writes undone. Better name: <em>abortability</em>. NOT about concurrency — that's Isolation.</td><td>Database</td></tr>
+    <tr><td><strong>Consistency</strong></td><td>Application invariants (credits = debits) preserved. The app defines what's valid. "Was tossed in to make the acronym work."</td><td>Application</td></tr>
+    <tr><td><strong>Isolation</strong></td><td>Concurrent transactions don't interfere. Ideal: same result as serial execution. In practice, most DBs use weaker levels.</td><td>Database</td></tr>
+    <tr><td><strong>Durability</strong></td><td>Once committed, survives crashes. Single-node: WAL. Replicated: copied to n nodes. Perfect durability doesn't exist.</td><td>Database</td></tr>
+  </tbody>
+</table>
+<div class="info">"Consistency" has 4 distinct meanings in DDIA: (1) replica consistency (Ch.5), (2) consistent hashing (Ch.6), (3) linearizability (Ch.9), (4) ACID consistency here. Context always matters.</div>
+
+<h3>Multi-Object Transactions &amp; Retry Pitfalls</h3>
+<ul>
+  <li><strong>Multi-object transactions</strong> needed when: keeping foreign keys valid, syncing denormalized data (email count + unread flag), updating secondary indexes atomically with primary data</li>
+  <li>Retrying aborted transactions is the whole point of atomicity — but retries have edge cases:</li>
+</ul>
+<table>
+  <thead><tr><th>Retry scenario</th><th>Problem</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Network fail after commit</td><td>Client doesn't know it succeeded → retry = duplicate</td><td>Idempotency keys / app deduplication</td></tr>
+    <tr><td>Overload caused the failure</td><td>Retry adds more load</td><td>Exponential backoff</td></tr>
+    <tr><td>Permanent error (constraint)</td><td>Retry is pointless</td><td>Don't retry</td></tr>
+    <tr><td>Side effects (email sent)</td><td>Can't undo</td><td>Two-phase commit (Ch.9)</td></tr>
+  </tbody>
+</table>
+<div class="warn">Many ORMs (Django, Rails ActiveRecord) don't retry aborted transactions — the error bubbles up and user input is lost. This defeats the purpose of transactions.</div>
+
+<h3>Isolation Level Ladder</h3>
+<pre>
+  Weakest                                                         Strongest
+  ──────────────────────────────────────────────────────────────────────────►
+  Read Uncommitted │ Read Committed  │ Snapshot Isolation │ Serializable
+  (almost unused)  │ (default most   │ (called "Repeatable│ (prevents ALL
+                   │  DBs)           │  Read" in most DBs)│  race conditions)</pre>
+
+<h3>Read Committed</h3>
+<div class="compare">
+  <div><h4>No dirty reads</h4><pre>You only see committed data.
+Uncommitted writes by other txns
+are invisible to you.
+Implementation: DB keeps both old
+committed value + new uncommitted
+value. Reads return old value until
+writing txn commits.</pre></div>
+  <div><h4>No dirty writes</h4><pre>You only overwrite committed data.
+Two txns writing same object:
+second waits until first commits.
+Implementation: row-level write
+locks held until commit/abort.
+Does NOT prevent lost updates.</pre></div>
+</div>
+<div class="info">Default in PostgreSQL, Oracle, SQL Server, MemSQL.</div>
+
+<h3>Snapshot Isolation + MVCC</h3>
+<p><strong>Read skew</strong> (nonrepeatable read): Alice checks two accounts during a transfer and sees $100 missing — she caught the transfer mid-flight. Usually harmless, but critical for backups (inconsistent snapshot) and analytics queries (nonsensical results). Solution: each transaction reads from a <strong>consistent snapshot</strong> of the DB at its start time.</p>
+<pre>
+  Multi-Version Concurrency Control (MVCC)
+
+  Each write creates a new row version tagged with the writing transaction's ID.
+  Each row tracks: created_by(txn_id)  deleted_by(txn_id)
+
+  v1: created_by=10, deleted_by=20  ← old version
+  v2: created_by=20, deleted_by=NULL ← current version
+
+  Visibility rules at read time (hide this version if ANY of):
+    1. Writing txn not yet committed when this txn started
+    2. Writing txn was aborted
+    3. Writing txn has a higher ID (started after us)
+  Everything else → visible.
+
+  Key property: readers never block writers, writers never block readers.
+  Long-running read queries work on a consistent snapshot without blocking writes.</pre>
+<div class="warn">Naming confusion: Oracle calls snapshot isolation "serializable" (it isn't). PostgreSQL/MySQL call it "repeatable read". IBM DB2 uses "repeatable read" to mean actual serializability. "Nobody really knows what repeatable read means."</div>
+
+<h3>Preventing Lost Updates</h3>
+<p>Two transactions both read-modify-write the same value. The second write clobbers the first (incrementing a counter, editing a wiki page, updating a JSON document).</p>
+<table>
+  <thead><tr><th>Solution</th><th>How</th><th>Risk</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Atomic write operations</strong></td><td><code>UPDATE counters SET value = value + 1</code> — DB does it atomically with exclusive lock</td><td>Not all logic can be expressed atomically</td></tr>
+    <tr><td><strong>Explicit locking</strong></td><td><code>SELECT ... FOR UPDATE</code> locks rows before read-modify-write cycle</td><td>Easy to forget a lock somewhere</td></tr>
+    <tr><td><strong>Automatic detection</strong></td><td>DB detects lost updates during snapshot isolation and aborts offender</td><td>MySQL/InnoDB does NOT do this</td></tr>
+    <tr><td><strong>Compare-and-set</strong></td><td><code>UPDATE ... WHERE content = 'old value'</code> — only succeeds if unchanged</td><td>Unsafe if WHERE reads from old snapshot — check your DB</td></tr>
+    <tr><td><strong>Conflict resolution</strong></td><td>Replicated DBs: last-write-wins or CRDTs/merge at application level</td><td>LWW (Cassandra default) silently loses data</td></tr>
+  </tbody>
+</table>
+
+<h3>Write Skew &amp; Phantoms</h3>
+<p>The subtlest race condition. Two transactions read the same data, make decisions based on it, then update <em>different</em> objects. No dirty write, no lost update — but the combined effect violates an invariant.</p>
+<pre>
+  The 4-step pattern (appears everywhere):
+  1. SELECT — check a precondition (≥2 doctors on call, room not booked, balance &gt; 0)
+  2. Application decides to proceed based on the result
+  3. WRITE (INSERT/UPDATE/DELETE) — changes data, invalidating the precondition
+  4. Concurrent txn did the same thing → both proceeded on a stale premise
+
+  ──────────────────────────────────────────────────────────────
+  Doctor on-call (write skew on existing rows):
+  ──────────────────────────────────────────────────────────────
+  t1  Txn A (Alice): SELECT on_call_count → 2
+  t2  Txn B (Bob):   SELECT on_call_count → 2 (same snapshot)
+  t3  Txn A: 2 ≥ 2, safe → UPDATE doctors SET on_call=false WHERE name='Alice'
+  t4  Txn B: 2 ≥ 2, safe → UPDATE doctors SET on_call=false WHERE name='Bob'
+  t5  Both COMMIT → 0 doctors on call. Invariant violated. ✗
+
+  Each txn updated a different row → no write-write conflict detected.
+  Snapshot isolation misses this entirely.
+
+  ──────────────────────────────────────────────────────────────
+  Meeting room booking (phantom — no rows exist to lock):
+  ──────────────────────────────────────────────────────────────
+  t1  Txn A: SELECT room_101 overlap noon-1pm → 0 rows (no conflict)
+  t2  Txn B: SELECT room_101 overlap noon-1pm → 0 rows (Alice's INSERT not yet visible)
+  t3  Txn A: INSERT booking(Alice, room_101, noon-1pm)
+  t4  Txn B: INSERT booking(Bob,   room_101, noon-1pm)
+  t5  Both COMMIT → room 101 double-booked. ✗
+
+  SELECT...FOR UPDATE on zero rows locks nothing — there's nothing to attach a lock to.
+  Bob's INSERT changes the result of Alice's earlier SELECT: this is a phantom.</pre>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Precondition</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Doctor on-call</td><td>≥2 doctors on call</td><td>FOR UPDATE on matching rows, or serializable</td></tr>
+    <tr><td>Room booking</td><td>No overlapping bookings</td><td>Serializable — phantom, can't lock non-existent rows</td></tr>
+    <tr><td>Username claim</td><td>Username not taken</td><td>Unique constraint (simple fix)</td></tr>
+    <tr><td>Double-spending</td><td>Balance ≥ amount</td><td>Serializable</td></tr>
+    <tr><td>Multiplayer game</td><td>Position not taken</td><td>Unique constraint or serializable</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>Materializing conflicts</strong> (last resort): create a table of all possible lock targets (e.g., all room–timeslot combos for 6 months). Lock rows with FOR UPDATE. Correct, but leaks concurrency control into the data model.</div>
+
+<h3>Serializability: 3 Approaches</h3>
+
+<h4>Approach 1 — Actual Serial Execution</h4>
+<pre>
+  One transaction at a time, single thread. Became practical ~2007:
+  - RAM got cheap → active dataset fits in memory, no disk I/O waits
+  - OLTP transactions are short → single thread handles many/sec
+  - Analytics queries run separately on snapshot isolation
+
+  Requirements:
+  ┌──────────────────────────────────────────────────────────────┐
+  │ Stored procedures — entire txn submitted as one unit         │
+  │   (interactive back-and-forth means the single thread spends │
+  │    all its time waiting for network round trips)             │
+  │ Transactions must be fast — one slow txn stalls everything   │
+  │ Dataset fits in RAM                                          │
+  │ Write throughput fits one CPU core, or data is partitioned   │
+  └──────────────────────────────────────────────────────────────┘
+  Cross-partition transactions: requires lock-step coordination across all
+  partitions → orders of magnitude slower.
+  VoltDB: ~1,000 cross-partition writes/sec vs millions for single-partition.
+
+  Used by: VoltDB/H-Store, Redis, Datomic.</pre>
+
+<h4>Approach 2 — Two-Phase Locking (2PL)</h4>
+<pre>
+  Core rule: readers block writers AND writers block readers.
+  (Contrast: snapshot isolation — neither blocks the other)
+
+  Lock modes:
+  ┌───────────────┬────────────────────────────────────────────────┐
+  │ Shared lock   │ Read — multiple txns can hold simultaneously    │
+  │ Exclusive lock│ Write — no other lock (shared or excl) allowed  │
+  │ Upgrade       │ Shared → exclusive when a read becomes a write  │
+  └───────────────┴────────────────────────────────────────────────┘
+  Phase 1: acquire locks during execution.
+  Phase 2: release ALL locks at commit/abort.
+  Deadlocks: DB detects cycles, aborts one txn. Must be retried.
+
+  Performance: significantly worse throughput and p99 latency than
+  weak isolation. One slow txn holding many locks can stall the entire system.
+
+  2PL ≠ 2PC. Two-Phase Locking (concurrency) ≠ Two-Phase Commit (Ch.9, distributed txns).</pre>
+
+<div class="compare">
+  <div><h4>Row-level 2PL: solves write skew on existing rows</h4><pre>Doctor example (rows exist to lock):
+t1 Txn A: SELECT → shared locks on Alice + Bob
+t2 Txn B: SELECT → shared locks on Alice + Bob
+   (shared locks coexist — both read OK)
+t3 Txn A UPDATE Alice → needs exclusive lock
+   Bob holds shared lock on Alice → Alice WAITS
+t4 Txn B UPDATE Bob → needs exclusive lock
+   Alice holds shared lock on Bob → Bob WAITS
+   → DEADLOCK detected. Bob aborted.
+t5 Alice commits. 1 doctor still on call. ✓</pre></div>
+  <div><h4>Row-level 2PL FAILS for phantoms</h4><pre>Booking example (no rows to lock):
+t1 Txn A: SELECT room_101 → 0 rows
+   2PL wants shared locks on rows...
+   but there are no rows. Lock attaches
+   to nothing.
+t2 Txn B: Same. Also acquires zero locks.
+t3 Txn A: INSERT → exclusive lock on new row A
+t4 Txn B: INSERT → exclusive lock on new row B
+   (different rows — no conflict between them)
+t5 Both COMMIT → room double-booked. ✗</pre></div>
+</div>
+
+<pre>
+  Predicate locks: lock the logical condition itself
+  ─────────────────────────────────────────────────────────────────────
+  Instead of locking specific rows, lock the WHERE condition.
+  Guards all objects — existing AND future — that match the predicate.
+  Any INSERT/UPDATE/DELETE matching this condition must wait.
+  Downside: every write checked against ALL active predicate locks → O(active_locks) per write.
+
+  Index-range locks: the practical approximation (what real DBs use)
+  ─────────────────────────────────────────────────────────────────────
+  Instead of the exact predicate, lock the INDEX ENTRY the query used to search.
+  Superset of the original condition → O(1) check (just look at the index entry).
+  Example: query used room_id index → lock index entry for room_id=101.
+  Any INSERT for room_id=101 must update that index → blocked. ✓
+  False positive: Carol booking room_101 at 3pm is also blocked (no actual conflict).
+  Fallback: if no suitable index → shared lock on the ENTIRE TABLE. Correct but terrible.</pre>
+
+<table>
+  <thead><tr><th>Lock type</th><th>What it locks</th><th>Phantom prevention</th><th>Check cost</th><th>False positives</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Row locks</strong> (basic 2PL)</td><td>Specific existing rows</td><td>No — can't lock rows that don't exist</td><td>O(1)</td><td>None</td></tr>
+    <tr><td><strong>Predicate locks</strong></td><td>The logical condition (all matching objects, future &amp; present)</td><td>Yes</td><td>O(active_locks) per write</td><td>None</td></tr>
+    <tr><td><strong>Index-range locks</strong></td><td>Index entry covering the query's search range (superset)</td><td>Yes</td><td>O(1)</td><td>Yes — blocks writes outside original predicate</td></tr>
+  </tbody>
+</table>
+<div class="info">Used by: MySQL/InnoDB (serializable), SQL Server (serializable), DB2 (repeatable read).</div>
+
+<h4>Approach 3 — Serializable Snapshot Isolation (SSI)</h4>
+<p>Newest approach (2008). <strong>Optimistic</strong>: transactions proceed without blocking. At commit time, DB checks for conflicts and aborts if serialization was violated. Both cases detect the same problem (acting on stale data) but the DB discovers it through different signals depending on <em>when</em> the conflicting write happens relative to the read.</p>
+
+<pre>
+  Case 1 — Stale MVCC reads (conflicting write existed before the read, hidden by MVCC)
+  ──────────────────────────────────────────────────────────────────────────────────────
+  t1  Txn 42 writes Alice.on_call=false (uncommitted)
+  t2  Txn 43 reads on_call_count → 2. MVCC hides txn 42's uncommitted write.
+      DB records: "txn 43 ignored txn 42's write." (No abort yet — txn 42 might still abort.)
+  t3  Txn 43 writes Bob.on_call=false (not blocked — SSI is optimistic)
+  t4  Txn 42 COMMITS. Alice is permanently off call.
+  t5  Txn 43 tries to COMMIT. SSI checks: "Did txn 43 ignore a write that's now committed?"
+      Yes (txn 42's write). Txn 43 also made writes → potential write skew. → ABORT.
+
+  Case 2 — Write affects prior reads (conflicting write happens after the read)
+  ──────────────────────────────────────────────────────────────────────────────
+  t1  Txn 42 reads on_call_count=2. Txn 43 reads on_call_count=2.
+      Index[shift_id=1234].readers = {txn 42, txn 43}
+  t2  Txn 42 writes Alice.on_call=false → checks index: "who read shift_id=1234?" → txn 43.
+      Notifies txn 43: "your read may be stale." (Non-blocking — just a tripwire.)
+  t3  Txn 43 writes Bob.on_call=false → checks: "who read?" → txn 42. Notifies txn 42.
+      Both flagged.
+  t4  Txn 42 tries to COMMIT first. "Was I notified?" Yes. "Did notifier (txn 43) commit?" No.
+      Uncommitted notification → txn 42 can commit safely. COMMITTED. (First committer wins.)
+  t5  Txn 43 tries to COMMIT. "Was I notified?" Yes. "Did notifier (txn 42) commit?" YES.
+      Confirmed stale read + txn 43 also made writes → ABORT.</pre>
+
+<table>
+  <thead><tr><th></th><th>Case 1</th><th>Case 2</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Timing</strong></td><td>Conflicting write existed before the read</td><td>Conflicting write happens after the read</td></tr>
+    <tr><td><strong>What DB sees at read time</strong></td><td>MVCC engine skips an uncommitted version — records the ignore</td><td>Data is genuinely current — nothing to flag</td></tr>
+    <tr><td><strong>Detection source</strong></td><td>Reader side — MVCC records what it hid</td><td>Writer side — writer checks index for past readers, notifies them</td></tr>
+    <tr><td><strong>At commit check</strong></td><td>"Did any write I ignored become committed?"</td><td>"Did any writer who notified me commit?"</td></tr>
+  </tbody>
+</table>
+<div class="good">SSI performance: writers don't block readers, readers don't block writers. Much more predictable latency than 2PL. Not limited to one CPU core — FoundationDB distributes conflict detection across machines. Abort rate under high contention is the main cost.</div>
+<div class="info">Used by: PostgreSQL ≥9.1, FoundationDB.</div>
+
+<h3>Race Conditions by Isolation Level</h3>
+<table>
+  <thead><tr><th>Race condition</th><th>Description</th><th>Prevented by</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Dirty reads</strong></td><td>Reading uncommitted data</td><td>Read committed and above</td></tr>
+    <tr><td><strong>Dirty writes</strong></td><td>Overwriting uncommitted data</td><td>Almost all implementations</td></tr>
+    <tr><td><strong>Read skew</strong></td><td>Seeing DB at two different points in time within one read</td><td>Snapshot isolation and above</td></tr>
+    <tr><td><strong>Lost updates</strong></td><td>Concurrent read-modify-write clobbers one write</td><td>Snapshot isolation (some DBs), serializable</td></tr>
+    <tr><td><strong>Write skew</strong></td><td>Decision based on stale premise, writes to different objects</td><td>Serializable only</td></tr>
+    <tr><td><strong>Phantoms</strong></td><td>Write changes another txn's search result set</td><td>Serializable only</td></tr>
+  </tbody>
+</table>
+
+<h3>Three Serializability Approaches Compared</h3>
+<table>
+  <thead><tr><th>Approach</th><th>Philosophy</th><th>Strength</th><th>Weakness</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Serial execution</strong></td><td>Pessimistic (extreme)</td><td>Simple, no conflicts by definition</td><td>One CPU core, stored procs required, dataset must fit RAM</td><td>VoltDB, Redis, Datomic</td></tr>
+    <tr><td><strong>Two-phase locking (2PL)</strong></td><td>Pessimistic</td><td>Prevents all races, well-understood for decades</td><td>Deadlocks, terrible p99 latency, readers block writers</td><td>MySQL/InnoDB, SQL Server</td></tr>
+    <tr><td><strong>SSI</strong></td><td>Optimistic</td><td>Near-snapshot performance, scales across partitions</td><td>Abort rate under contention, relatively new</td><td>PostgreSQL 9.1+, FoundationDB</td></tr>
+  </tbody>
+</table>
+
+</template>
+
+<template id="node-12-07" data-type="node" data-trail="trail-12" data-order="7"
+  data-title="Transformer Internals & the GPT-3 Parameter Count"
+  data-file="Transformer Internals & GPT-3 Parameter Count.md"
+  data-bridge="You now know what's in the box: weights arranged as attention + MLP blocks, ~175B of them for GPT-3. The obvious next question for anyone running these — they're huge. How do we make them smaller and cheaper without retraining from scratch? Two orthogonal levers: distillation and quantization.">
+<h3>The end-to-end pipeline</h3>
+<p>A transformer turns a sequence of token IDs into a next-token prediction. Built on the 3Blue1Brown series (GPT overview, Attention, MLP chapters).</p>
+<pre>
+text &rarr; token IDs &rarr; [embedding lookup] &rarr; +positional encoding
+     &rarr; ( attention &rarr; MLP ) &times; n_layers     &larr; residual stream flows through
+     &rarr; [unembedding] &rarr; probability over 50,257 tokens &rarr; sample next token
+</pre>
+<ul>
+  <li><b>Tokenize</b>: text &rarr; word-piece tokens from a fixed vocab, each an integer ID. GPT-3 <code>n_vocab = 50,257</code>.</li>
+  <li><b>Embedding lookup</b>: token ID &rarr; a learned vector of width <code>d_embed = 12,288</code>. It's <b>indexing, not computation</b> &mdash; like a hash table where the token ID <i>is</i> the array offset (O(1), no collisions).</li>
+  <li><b>Positional encoding</b>: order info added on top (raw embedding = <i>what</i>, not <i>where</i>).</li>
+  <li><b>Layer stack</b>: <code>n_layers = 96</code> identical layers, each = attention + MLP, both <b>adding</b> into the residual stream.</li>
+  <li><b>Unembedding</b>: final vector &rarr; score over all 50,257 tokens &rarr; softmax &rarr; sample.</li>
+</ul>
+
+<div class="info"><b>Residual stream (key mental model):</b> the "river of meaning" is a per-token vector of width 12,288. Every block <b>reads from</b> and <b>adds back into</b> it &mdash; never replaced, only edited. That's why every projection matrix has 12,288 as one dimension.</div>
+
+<h4>Attention block &mdash; tokens share information</h4>
+<p>Three <b>learned</b> projections per token: <b>Query</b> (E&times;W_Q, "what am I looking for?"), <b>Key</b> (E&times;W_K, "what do I offer?"), <b>Value</b> (E&times;W_V, the info passed on). Database analogy: a query is matched against keys, matching keys return values.</p>
+<ul>
+  <li>Current token's Query &middot; every token's Key (dot product) &rarr; softmax per column &rarr; weighted blend of Values.</li>
+  <li>3B1B "fluffy blue creature": in the <code>creature</code> column, <code>fluffy</code>=0.42, <code>blue</code>=0.58.</li>
+  <li><b>Causal masking</b>: a token attends only to itself + earlier tokens &rarr; grid is lower-triangular. This is what makes a token's K/V <b>immutable once computed</b> (the basis of the KV cache).</li>
+  <li><b>Multi-head</b>: many heads in parallel, each its own W_Q/W_K/W_V. GPT-3: 96 heads &times; 96 layers.</li>
+</ul>
+<div class="good"><b>Why "KV" cache, not "QKV":</b> at generation, the current token's Query is compared against <i>all previous</i> tokens' Keys/Values. K,V of every token are reused on every future step &rarr; cache them. Q of a token is used once, at its own step, then discarded.</div>
+
+<h4>MLP block &mdash; each token processed alone</h4>
+<p>Attention <i>mixes</i> tokens; the MLP <i>digests</i> each token independently.</p>
+<pre>
+d_embed (12,288) --up-proj--&gt; n_neurons (49,152) --[nonlinearity]--&gt; --down-proj--&gt; d_embed (12,288)
+</pre>
+<ul>
+  <li>Up-projection widens to 4&times;; nonlinearity (ReLU/GELU) gates each neuron (without it, two matrices collapse to one); down-projection contracts back.</li>
+  <li><b>Where facts live (3B1B thesis):</b> each hidden neuron can act as a fact detector &mdash; up-proj row = "question" (fires for a concept, e.g. a "Michael Jordan" neuron), down-proj column = "answer" (writes an associated concept, e.g. "basketball"). An MLP &asymp; learned <i>if-concept-then-concept</i> associations.</li>
+</ul>
+<div class="warn"><b>Caveat &mdash; superposition:</b> real neurons are polysemantic (fire for many unrelated features). "One neuron, one fact" is a teaching simplification.</div>
+
+<h4>The GPT-3 parameter table (175,181,291,520)</h4>
+<table>
+  <thead><tr><th>Component</th><th>Formula</th><th>Count</th></tr></thead>
+  <tbody>
+    <tr><td>Embedding</td><td>d_embed &times; n_vocab</td><td>617,558,016</td></tr>
+    <tr><td>Key</td><td>d_query &times; d_embed &times; n_heads &times; n_layers</td><td>14,495,514,624</td></tr>
+    <tr><td>Query</td><td>d_query &times; d_embed &times; n_heads &times; n_layers</td><td>14,495,514,624</td></tr>
+    <tr><td>Value</td><td>d_value &times; d_embed &times; n_heads &times; n_layers</td><td>14,495,514,624</td></tr>
+    <tr><td>Output</td><td>d_embed &times; d_value &times; n_heads &times; n_layers</td><td>14,495,514,624</td></tr>
+    <tr><td>Up-projection</td><td>n_neurons &times; d_embed &times; n_layers</td><td>57,982,058,496</td></tr>
+    <tr><td>Down-projection</td><td>d_embed &times; n_neurons &times; n_layers</td><td>57,982,058,496</td></tr>
+    <tr><td>Unembedding</td><td>n_vocab &times; d_embed</td><td>617,558,016</td></tr>
+    <tr><td><b>Total</b></td><td></td><td><b>175,181,291,520</b></td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><b>Embedding == Unembedding</b> (617M each) &mdash; same numbers, reversed roles.</li>
+  <li><b>K/Q/V/Output equal</b> (~14.5B each) &mdash; same factors, different orientation.</li>
+  <li><b>Up == Down</b> (~58B each), together <b>~116B = 66%</b> of the total. Most parameters &mdash; and most stored facts &mdash; live in the <b>MLPs</b>, not attention.</li>
+</ul>
+<div class="info">Every weight here is <b>learned via backpropagation</b>: forward pass &rarr; loss &rarr; gradients (blame propagated backward) &rarr; nudge each weight. "Learned" everywhere means this.</div>
+</template>
+
+<template id="node-12-08" data-type="node" data-trail="trail-12" data-order="8"
+  data-title="Making Models Smaller: Distillation & Quantization"
+  data-file="Distillation & Quantization.md"
+  data-bridge="We can now shrink a model on two axes — fewer params (distillation), fewer bytes per param (quantization). But a smaller artifact is still inert. Next: how it actually runs to produce tokens, and the KV cache + GPU memory facts that dominate inference.">
+<h3>Two orthogonal levers</h3>
+<p><b>Distillation reduces the <i>number</i> of parameters; quantization reduces the <i>bytes per</i> parameter.</b> Different axis from RAG/fine-tuning (those inject knowledge; these compress). Often stacked: a small distilled model, quantized to INT4, is the "runs on a laptop" recipe.</p>
+
+<h4>Distillation &mdash; fewer parameters</h4>
+<p>Train a small <b>student</b> to imitate a big <b>teacher</b>.</p>
+<ul>
+  <li><b>Core insight (soft targets):</b> the unembedding+softmax gives a full <i>distribution</i> (cat 60%, dog 25%, rock 0.001%). A hard label is one bit ("cat"); the distribution encodes that cat/dog are plausible, rock is absurd. The student learns the whole distribution &rarr; absorbs nuance.</li>
+  <li><b>Analogy:</b> an answer key says "B is correct"; a good teacher says "B correct, C a tempting trap, D nonsense" &mdash; the why/how-close is what transfers.</li>
+</ul>
+<table>
+  <thead><tr><th>Flavor</th><th>Signal used</th><th>Who can do it</th></tr></thead>
+  <tbody>
+    <tr><td>Classic / soft-label</td><td>Teacher's full probability distribution</td><td>Model owner (needs logits)</td></tr>
+    <tr><td>Data / response</td><td>Only final <b>text</b> outputs</td><td>Anyone (prompt&rarr;answer pairs)</td></tr>
+    <tr><td>Task-specific</td><td>Final text outputs, one narrow task</td><td>Anyone</td></tr>
+  </tbody>
+</table>
+<div class="warn"><b>Terminology nuance you caught:</b> only the <i>classic</i> flavor uses the distribution &mdash; the thing that makes the original (Hinton 2015) term meaningful. Data/task "distillation" use only hard text outputs &rarr; mechanically <b>identical to supervised fine-tuning</b>; the only difference is the labels came from a teacher model, not humans. Purists call these "synthetic-data fine-tuning."</div>
+<ul>
+  <li><b>Why the thin channel still works:</b> the teacher's <i>choice of token</i> still embeds competence; sampling it many times per prompt &asymp; sketching its distribution via a histogram of draws.</li>
+  <li><b>Backend relevance:</b> mini/haiku/flash-tier models are usually distilled from larger siblings &rarr; disproportionately good for their size (the "GPT-4 quality, fraction of cost" mechanism).</li>
+  <li><b>Caveats:</b> copies the teacher's mistakes/biases; student can't exceed teacher on what it distills. Provider ToS often restricts training competitors on their outputs.</li>
+</ul>
+
+<h4>Quantization &mdash; fewer bytes per parameter</h4>
+<p>Weights default to <b>FP32</b> (4 bytes, ~7 digits) but that precision is mostly wasted (0.4837192 &asymp; 0.484 in effect). Quantization exploits the slack.</p>
+<pre>
+weights in [-1,+1], want 8-bit (256 buckets):
+  slice range into 256 even buckets + one shared SCALE factor
+  store each weight as INDEX of nearest bucket (1 byte, not 4)
+  use: index &times; scale &rarr; approximate float
+  0.4837 &rarr; bucket 189 &rarr; recovers ~0.484   (rounding error = the cost)
+</pre>
+<table>
+  <thead><tr><th>Format</th><th>Bytes/weight</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>FP32</td><td>4</td><td>full baseline</td></tr>
+    <tr><td>FP16 / BF16</td><td>2</td><td>half precision; common training default</td></tr>
+    <tr><td>INT8</td><td>1</td><td>~4&times; smaller, little quality loss</td></tr>
+    <tr><td>INT4</td><td>0.5</td><td>8&times; smaller; self-hosting sweet spot</td></tr>
+    <tr><td>&le;3-bit</td><td>&lt; 0.5</td><td>aggressive; noticeable degradation</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>A filename like <code>Llama-3-8B-Q4_K_M</code> encodes it: Q4 = 4-bit.</li>
+  <li><b>Ops math:</b> 70B model = 140 GB (FP16) &rarr; 35 GB (INT4) &mdash; same param count, now fits one GPU. And inference is memory-bandwidth-bound, so fewer bytes/weight &asymp; faster decode.</li>
+  <li><b>DDIA echo:</b> same reason columnar compression speeds analytics &mdash; bottleneck is bytes read, not CPU.</li>
+  <li><b>PTQ vs QAT:</b> Post-Training (quantize finished weights, cheap, ~95% of downloads) vs Quantization-Aware Training (simulate rounding during training, better at low bit-widths).</li>
+</ul>
+<div class="warn"><b>Outliers:</b> a few large-magnitude weights matter disproportionately; modern methods (GPTQ, AWQ) protect them and quantize the rest harder. Rule of thumb: INT8 nearly free, INT4 sweet spot, below that real quality cost.</div>
+</template>
+
+<template id="node-12-09" data-type="node" data-trail="trail-12" data-order="9"
+  data-title="LLM Inference: Autoregressive Generation, KV Cache & GPUs"
+  data-file="LLM Inference - Autoregressive Generation, KV Cache & GPUs.md"
+  data-bridge="You now know how one request runs and what VRAM is (capacity vs bandwidth). The final step is running it for MANY users at once, profitably — batching, serving engines like vLLM, and the deployment math where context length and batch size fight over a fixed VRAM wall.">
+<h3>Autoregressive generation</h3>
+<p>An LLM generates <b>one token at a time</b>, feeding the whole sequence so far back each step. A 100-token answer = 100 forward passes.</p>
+<pre>
+pass 1  [The]            &rarr; "cat"
+pass 2  [The cat]        &rarr; "sat"
+pass 3  [The cat sat]    &rarr; "on"
+</pre>
+<p><b>The waste:</b> to process <code>[The cat sat]</code>, attention needs K/V of The, cat, sat &mdash; but The's and cat's K/V were already computed earlier and <b>never change</b> (causal masking). Recomputing every pass is quadratic waste.</p>
+
+<h4>The KV cache</h4>
+<p><b>Cache each token's K and V once computed; reuse on every later step.</b> Next pass, only compute K/V for the one new token.</p>
+<pre>
+pass 1  [The]          compute K,V for The
+pass 2  [The cat]      The from cache, compute cat
+pass 3  [The cat sat]  The,cat from cache, compute sat
+        cache grows by ONE entry per step
+</pre>
+<ul>
+  <li>Space-time tradeoff: spend memory to avoid recomputation (memoization / materialized-view instinct).</li>
+  <li><b>DDIA echo:</b> entries are <b>immutable once written</b> (causal masking) &rarr; like an append-only log, no invalidation problem.</li>
+</ul>
+<div class="good"><b>Why K,V but not Q:</b> the current token's Query is compared against all previous K/V. K,V of every token are reused on every future step (cache); Q is used once at its own step, then discarded.</div>
+<div class="warn"><b>Why NOT cache the layer output e+ (a wrong turn worth recording):</b> e2+ for "cat" is stable, true &mdash; but attention reads other tokens' <b>K and V</b> (upstream projections), not their post-attention <b>output</b> e+ (downstream). e2+ isn't cat's Key or Value, so caching it gives attention nothing; you'd still re-project. <b>A finished token contributes to future tokens only through its K and V</b> &mdash; the only thing worth caching.</div>
+<ul>
+  <li><b>Per-layer caches:</b> each layer has its own W_K/W_V &rarr; a 2-layer model keeps 2 separate caches. The new token flows forward; at each layer it reaches back into <i>that layer's</i> cache. Past tokens' meaning lives <b>in the caches</b>, not absorbed into the newest vector.</li>
+  <li><b>Grid view:</b> columns = each token's Query vs all Keys (rows); causal masking &rarr; lower-triangular. Per decode pass only <b>one new column</b> appears (new Q vs cached Keys) &rarr; cost is <b>linear</b>, not the quadratic full-triangle rebuild. That collapse is the entire payoff.</li>
+</ul>
+
+<h4>Prefill vs decode</h4>
+<table>
+  <thead><tr><th>Phase</th><th>What</th><th>Bound by</th><th>Metric</th></tr></thead>
+  <tbody>
+    <tr><td>Prefill</td><td>Whole prompt in ONE parallel pass; fills cache in bulk; emits 1st token</td><td>Compute</td><td>TTFT</td></tr>
+    <tr><td>Decode</td><td>One token per pass, sequential (N+1 needs N)</td><td>Memory bandwidth</td><td>TPS</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><b>TTFT</b> (Time To First Token) = prefill latency, dominated by prompt length &rarr; perceived responsiveness.</li>
+  <li><b>TPS</b> (Tokens Per Second) = decode speed &rarr; how fast a long answer streams.</li>
+  <li>Separate because you can be fast at one, slow at the other (huge prompt &rarr; bad TTFT even if TPS great).</li>
+</ul>
+
+<h4>GPUs &amp; VRAM (why all the above is shaped this way)</h4>
+<ul>
+  <li><b>CPU</b> = few powerful cores (sequential/branchy). <b>GPU</b> = thousands of weak cores doing the same op on different data in parallel. A transformer is matrix multiplies &rarr; exactly the GPU's shape &rarr; hundreds of&times; faster.</li>
+  <li><b>VRAM</b> = the GPU's own memory holding weights + activations + KV cache. Two properties:</li>
+</ul>
+<div class="compare">
+  <div><b>Capacity (GB)</b> &mdash; a HARD WALL. 70B@FP16 = 140 GB; an 80 GB GPU physically won't load it. Quantization shrinks weights to fit under it.</div>
+  <div><b>Bandwidth (bytes/s)</b> &mdash; moving data to cores is slower than the cores compute, so cores sit idle waiting = "memory-bandwidth-bound." Decode's bottleneck.</div>
+</div>
+<ul>
+  <li>"Quantization helps it fit" &rarr; capacity. "Decode is bandwidth-bound" &rarr; reads every weight/token. "KV cache is the real bottleneck" &rarr; competes with weights for capacity.</li>
+  <li><b>DDIA echo:</b> capacity vs bandwidth = disk <i>size</i> vs disk <i>throughput</i>. Twist: VRAM is the only tier cores use directly, so "does it fit" is unforgiving.</li>
+</ul>
+<div class="info"><b>Anchor:</b> a GPU is thousands of simple cores doing matrix math in parallel, fed by VRAM whose <i>capacity</i> decides what fits and whose <i>bandwidth</i> often decides how fast you go.</div>
+</template>
+
+<template id="node-12-10" data-type="node" data-trail="trail-12" data-order="10"
+  data-title="Serving LLMs in Production: Batching, Engines & Economics"
+  data-file="Serving LLMs in Production - Batching, Engines & Economics.md"
+  data-bridge="">
+<h3>Batching &mdash; where throughput comes from</h3>
+<p><b>Problem:</b> producing one token for one user reads the entire model's weights from VRAM (slow, bandwidth-bound), then thousands of cores do tiny work and go idle. Expensive cost, almost nothing gained.</p>
+<p><b>Insight:</b> the weights are the same for every request &rarr; process many at once. Read weights once, compute the next token for all requests together. The weight-read is <b>amortized</b>; the extra compute was basically free.</p>
+<table>
+  <thead><tr><th></th><th>Weights</th><th>KV caches</th></tr></thead>
+  <tbody>
+    <tr><td>Copies</td><td>ONE, shared</td><td>ONE PER request (private)</td></tr>
+    <tr><td>Cost vs batch</td><td><b>amortizes</b> (&divide; batch) &check;</td><td><b>does NOT</b> &mdash; grows linearly &cross;</td></tr>
+  </tbody>
+</table>
+<div class="info"><b>DDIA echo:</b> weights = shared read-only data segment (amortizes); KV caches = per-connection session state (grows with live connections). Same wall as connection pooling &mdash; cap concurrency to fit a fixed memory budget.</div>
+<ul>
+  <li><b>Bigger batch isn't infinitely better:</b> (1) weight-read per request falls as 1/batch &mdash; diminishing returns, the un-amortizable KV read becomes dominant; (2) batch + KV caches compete for the same fixed VRAM.</li>
+  <li><b>Static vs continuous batching:</b> static waits for a fixed group to ALL finish (short requests leave idle slots). <b>Continuous</b> (in-flight): evict a finished request and slot a waiting one mid-flight &rarr; GPU stays saturated. Biggest throughput-per-dollar lever. Resource-pool scheduler instinct (avoid head-of-line blocking).</li>
+</ul>
+
+<h4>Serving engine &mdash; what it actually is</h4>
+<pre>
+requests (HTTP) &rarr; [ SERVING ENGINE ] &harr; GPU + VRAM &rarr; tokens stream back
+                   &boxur; scheduler (continuous batching)
+                   &boxur; KV-cache manager (PagedAttention)
+                   &boxur; optimized GPU kernels (FlashAttention, fused matmuls)
+                   &boxur; API server + token streaming
+</pre>
+<div class="info"><b>DDIA framing:</b> a serving engine is to a model what a <b>database engine is to a data file</b>. Weights = data file; engine = Postgres wrapped around it (query planner + buffer pool + connection layer + execution engine).</div>
+<ul>
+  <li><b>Is vLLM "just an HTTP server"?</b> No. It contains an optional OpenAI-compatible HTTP shell, but you can <code>import vllm</code> and call <code>LLM.generate()</code> in-process with no socket &mdash; scheduler/PagedAttention/kernels still run. Like calling Postgres "a TCP server." It's an <b>inference engine</b> with an optional HTTP adapter.</li>
+  <li>Alternatives: TensorRT-LLM (NVIDIA, fastest on their HW), SGLang (structured/agent workloads), TGI (Hugging Face).</li>
+  <li><b>PagedAttention:</b> splits the KV cache into fixed-size non-contiguous <b>blocks</b>, allocated on demand &mdash; OS virtual-memory paging applied to the cache. Flip side: when VRAM is exhausted it swaps to host memory and decode latency spikes (~30ms &rarr; 200ms+/token) &mdash; thrashing.</li>
+</ul>
+
+<h4>The VRAM budget &amp; deployment math</h4>
+<pre>
+total VRAM = model weights (fixed) + &Sigma; per-request KV cache (grows with batch &times; context)
+KV per request &asymp; 2 &times; layers &times; kv_heads &times; head_dim &times; seq_len &times; bytes
+                  (the 2 = K and V; LINEAR in context length AND batch)
+</pre>
+<p><b>Worked example &mdash; Llama-70B on one 80 GB H100 (FP8):</b> weights &asymp; 70 GB &rarr; only ~10 GB left for ALL KV caches.</p>
+<table>
+  <thead><tr><th>Context</th><th>KV per request</th><th>Fits in ~10 GB</th></tr></thead>
+  <tbody>
+    <tr><td>128K</td><td>~13 GB</td><td>&lt; 1 (!)</td></tr>
+    <tr><td>32K</td><td>~3.2 GB</td><td>~3</td></tr>
+    <tr><td>4K</td><td>~0.4 GB</td><td>~24</td></tr>
+  </tbody>
+</table>
+<div class="warn"><b>Central production tradeoff:</b> context length and batch size trade directly against each other inside the fixed VRAM wall. A workload fine at 8K can OOM at 32K &mdash; same model, same GPU.</div>
+
+<h4>GPU landscape (early 2026)</h4>
+<table>
+  <thead><tr><th>GPU</th><th>VRAM</th><th>Bandwidth</th><th>~Cloud $/hr</th></tr></thead>
+  <tbody>
+    <tr><td>H100</td><td>80 GB</td><td>3.35 TB/s</td><td>~$2.00</td></tr>
+    <tr><td>H200</td><td>141 GB</td><td>4.8 TB/s</td><td>~$2.60</td></tr>
+    <tr><td>B200</td><td>~180-192 GB</td><td>~8 TB/s</td><td>~$4-5</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>H200 = H100 compute die + more/faster memory &rarr; pure inference win (fits 70B on one GPU; H100 needs 2-way tensor parallelism). B200 = new arch, ~2&times; bandwidth + FP4 &rarr; ~4&times; Llama-70B throughput, ~$0.17/M tokens vs ~$0.50.</li>
+</ul>
+
+<h4>Multi-GPU parallelism &amp; MoE</h4>
+<ul>
+  <li><b>Tensor parallelism</b> = split each layer's matrices across GPUs (sharding within an op; needs NVLink). <b>Pipeline parallelism</b> = different layers on different GPUs (assembly line / partition by stage). Fitting on ONE GPU is preferred (crossing adds per-token latency).</li>
+  <li><b>MoE wrinkle:</b> DeepSeek V3 (671B total) routes only ~37B active/token &mdash; cheap to compute, but the whole expert table must live in VRAM &rarr; total <i>capacity</i> dominates.</li>
+</ul>
+<div class="good"><b>Whole picture (one line):</b> quantize weights to fit and free room &rarr; fill leftover VRAM with as big a batch as latency allows &rarr; let context length and batch fight over that leftover &rarr; use vLLM to keep the batch saturated &rarr; read it out as $/token. The central knob: bigger batch = cheaper per token, until latency breaks or VRAM runs out.</div>
+</template>
 
 <script>
 (function () {

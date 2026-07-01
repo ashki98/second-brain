@@ -33,8 +33,14 @@ second_brain3/
 └── misc_scripts/               ← one-off migration scripts (do not re-run)
 ```
 
-**Important:** `trails.html` is the sole source of truth. All other files in `trails/`
-(old `.md` trail files, `index.md`, `log.md`) are superseded — ignore them entirely.
+**Important:** `trails.html` is the sole source of truth for trail *content*. The old
+markdown trail files (`00-mega-trail.md` … `12-*.md`) in `trails/` are superseded — ignore them.
+The legacy `trails/index.md` and `trails/log.md` have been **deleted** (do not recreate them under `trails/`).
+
+Two live bookkeeping files DO matter and must be kept current (see workflows):
+- `SDE Concepts/index.md` — the topic → file map. Read it every session; update it on every new note.
+
+(There is intentionally **no log file** — git history is the audit trail. Do not create one.)
 
 ---
 
@@ -165,7 +171,7 @@ definitions section, following the existing pattern.
 **For a new last node** (most common):
 1. Find the current last node template for that trail
 2. Set `data-bridge` on it (it previously had no bridge or an empty one)
-3. Add the new `<template data-type="node">` before `</body>` with `data-bridge` empty
+3. Add the new `<template data-type="node">` **immediately before the `<script>` tag**, NOT before `</body>`. The JS engine scans templates when it runs — anything after `<script>` is invisible to it.
 
 **For a mid-trail insert** (less common):
 1. Update `data-order` on affected nodes (shift down by 1)
@@ -182,7 +188,12 @@ In the new template's innerHTML, cover **every concept from the source note**:
 - At least one `<pre>` diagram OR `<div class="compare">` OR `<table>` per node
 - End with practical implications or "when to use"
 
-### Step 6 — Report to Ashik
+### Step 6 — Update the index, then report
+
+Before reporting: update `SDE Concepts/index.md` (add the note to the file table and topic
+lookup).
+
+Then report to Ashik:
 
 ```
 ## What changed
@@ -301,7 +312,7 @@ to the entry point of the following node.
 
 ---
 
-## Current Trail Inventory (12 trails, 67 nodes)
+## Current Trail Inventory (12 trails, 68 nodes)
 
 | ID | Trail | Nodes | Prereqs |
 |---|---|---|---|
@@ -310,7 +321,7 @@ to the entry point of the following node.
 | trail-03 | Node.js Runtime | 3 | trail-02 |
 | trail-04 | Networking | 4 | none |
 | trail-05 | Backend Architecture | 8 | trail-04 |
-| trail-06 | Databases & Storage | 9 | trail-05 |
+| trail-06 | Databases & Storage | 10 | trail-05 |
 | trail-07 | Scaling & Distributed Systems | 7 | trail-06, trail-04 |
 | trail-08 | System Design | 4 | trail-07 |
 | trail-09 | DevOps & Infrastructure | 4 | trail-05 |
@@ -321,6 +332,34 @@ to the entry point of the following node.
 Node IDs: `node-{trailNum}-{position}` (e.g. `node-02-03`).
 When inserting mid-trail, keep existing IDs stable — add new node at end of sequence
 and adjust `data-order` values. Do not renumber IDs.
+
+---
+
+## Operating Notes (learned the hard way)
+
+These are environment realities and process rules that prevent the most common failures.
+
+### Tooling: edit_file times out on this vault
+- `edit_file` **frequently hangs / times out** here (observed across multiple sessions). It usually still works for `trails.html` if each edit uses **one unique anchor** and is applied as a **separate small edit** (one node at a time), not a batch.
+- If `edit_file` times out: **do not blindly retry** — first re-read the file to check whether the edit actually applied (writes sometimes land even when no response comes back), to avoid double-applying.
+- For whole-file bookkeeping edits (`index.md`, `log.md`) where `edit_file` keeps failing: read the full file, then **rewrite it with `write_file`** (overwrite). Verify by re-reading.
+- `write_file` is reliable. `create_file` fails if the path exists — use `write_file` to overwrite.
+
+### Process: note first, trail second
+- The `SDE Concepts/` note is the **source of truth** and is **always created/updated before `trails.html` is touched**. Never write a trail node for a note that does not yet exist. (A trail node is a *view* of a note, never the original.)
+
+### Process: scope a multi-topic session before writing
+- When Ashik asks to "document everything" from a long session, **do not fan out into many thin notes.** Propose the **fewest notes that keep topics coherent**, merging along natural fault lines, and **confirm the note list with Ashik before writing any of them.**
+- Segmentation and merging are Ashik's judgment calls — surface them as a quick check, don't pre-decide silently.
+
+### Fact: trail ID vs. display number are off by one
+- The internal template IDs are `trail-12` / `node-12-*` for the trail that the inventory and Ashik call **"Trail 11 — AI & Modern Stack"** (and similarly down the list). This mismatch is **pre-existing and vault-wide.** Match the existing `node-XX-*` ID scheme of the trail you're editing — do **not** "fix" the numbering.
+
+### Fact: notes here use NO tags / frontmatter
+- Notes in this vault are plain markdown — **no YAML frontmatter, no tags** (unlike the older `second_brain` vault, which used tagged concept/entity pages). Do not add tags or ask about a tag scheme; there isn't one here.
+
+### Fact: trails.html is too large to read whole
+- `trails.html` is ~230 KB — it **cannot be read in one pass**, and the read tool here only supports head/tail (no arbitrary line ranges). Reconstruct structure via `head` (CSS + trail defs), `tail` (the `</template>` → `<script>` boundary), and targeted searches for specific `node-XX-YY` IDs. **Because the file can't be read whole, all house-style conventions must live in THIS file** (see Content Format / Content Standards) — never assume they're only discoverable inside `trails.html`.
 
 ---
 
