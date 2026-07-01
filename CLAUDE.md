@@ -8,9 +8,10 @@ This file tells Claude Code how to operate this knowledge base. Read it at the s
 
 A personal second brain for Ashik — a software engineer at WellnessLiving with deep Python/Node.js backend experience and growing AI/distributed-systems knowledge. The vault is managed in Obsidian.
 
-Two workflows:
+Three workflows:
 1. **Ingest** — Ashik adds a raw note to `SDE Concepts/`; Claude integrates it into `trails.html`
 2. **Query** — Ashik asks a question about his notes; Claude answers it and saves the explanation as a new note + trail node
+3. **Author / Capture** — Ashik wants a whole discussion written up; Claude authors multiple notes (with confirmation), then ingests each
 
 ---
 
@@ -288,7 +289,47 @@ Trail node updated: Trail NN — position N
 
 ---
 
-## Content Standards (applies to both workflows)
+## Author / Capture Workflow
+
+**Trigger:** Ashik says "document what we discussed," "write this up into notes," or
+otherwise wants a whole session's material captured — i.e. the notes do **not** exist yet
+and authoring them is the goal (not a byproduct of answering one question).
+
+This is distinct from the other two:
+- **Ingest** starts from a note Ashik already wrote.
+- **Query** answers one question and saves it as a side effect (usually one note).
+- **Author/Capture** deliberately authors **multiple** notes from a discussion, then ingests each.
+
+### Step 1 — Scope & segment, then CONFIRM before writing anything
+- Propose the **fewest notes that keep topics coherent.** Merge aggressively along natural
+  fault lines (e.g. "internals" vs "running it in production"); do not fan out into many thin notes.
+- Present the proposed note list (titles + one-line scope each) and the target folder.
+- **Always wait for Ashik's confirmation before authoring any note.** Segmentation is his
+  judgment call — surface it, don't pre-decide silently.
+
+### Step 2 — Author ALL notes first (then ingest — do not interleave)
+- Write every confirmed note into `SDE Concepts/<folder>/` **before** touching `trails.html`.
+- Use the note format + voice rules from the Query Workflow, Step 3 (Ashik's voice, concise,
+  bullet-heavy, no frontmatter/tags). Preserve useful "wrong turns" / misconceptions that came
+  up — they are part of how the material was learned.
+- Take multiple turns if needed. Notes are the source of truth; get them right first.
+
+### Step 3 — Update the index
+- Add all new notes to `SDE Concepts/index.md` (file table + topic lookup).
+
+### Step 4 — Ingest each note into trails.html
+- Once all notes exist and are confirmed, run the **Ingest Workflow (Steps 2–5)** for each
+  note, in reading order, adding one trail node per note.
+- Chain `data-bridge` across the new nodes, and set the previously-final node's bridge to
+  lead into the first new one.
+
+### Step 5 — Report
+Report once at the end: the notes created, the index update, and the trail nodes added
+(reuse the Ingest "What changed" block, one per node).
+
+---
+
+## Content Standards (applies to all workflows)
 
 ### Visual representations (mandatory)
 
