@@ -1,7 +1,7 @@
 # SDE Concepts — Index
 
 Claude's quick-reference TOC. Use this to locate notes before reading full files.
-Last updated: 2026-06-24
+Last updated: 2026-07-01
 
 ---
 
@@ -51,6 +51,8 @@ Last updated: 2026-06-24
 |---|---|
 | CORS.md | SOP, what triggers CORS, simple vs preflight requests, CORS headers, backend fix, proxy approach, CORS vs CSRF |
 | XSS Attacks.md | Stored/reflected/DOM-based XSS, Samy Worm, PayPal bug, input sanitisation, output escaping, CSP headers, DOMPurify |
+| Asymmetric Cryptography - RSA, DH & Elliptic Curves.md | Public/private key pair, padlock analogy, 3 security goals (confidentiality/authenticity/key agreement), RSA keygen (p/q/n/φ(n)/e/d), encrypt/decrypt formulas, modular exponentiation (square-and-multiply), trapdoor = factoring, RSA encryption vs signature key-direction swap, Diffie-Hellman (colour mixing, g^ab mod p, discrete log), DH ≠ RSA, EC as faster substrate (ECDH/ECDSA, smaller keys), X25519/Ed25519, hybrid encryption |
+| TLS Handshake & Secure Channels.md | TLS = handshake + record protocol, layer position, HTTPS = HTTP+TLS, SSL as deprecated predecessor, TLS 1.3 handshake steps (ClientHello/ServerHello/ECDH/Certificate/CertificateVerify/Finished), openssl s_client, CA chain of trust, MAC (keyed fingerprint, MAC vs signature), downgrade attack + transcript-covering Finished MAC, MITM attack + why CertificateVerify transcript-binding defeats it, forward secrecy via ephemeral keys |
 
 ### FastAPI/
 | File | Key topics |
@@ -216,6 +218,14 @@ Last updated: 2026-06-24
 - XSS types + prevention → `Security/XSS Attacks.md`
 - CORS, SOP, preflight → `Security/CORS.md`
 - MongoBleed CVE-2025-14847 → `MongoBleed.md`
+- Asymmetric crypto (RSA, DH, EC), public/private keys, signatures → `Security/Asymmetric Cryptography - RSA, DH & Elliptic Curves.md`
+- RSA implementation (keygen, encrypt/decrypt, trapdoor) → `Security/Asymmetric Cryptography - RSA, DH & Elliptic Curves.md`
+- Diffie-Hellman key exchange, discrete log → `Security/Asymmetric Cryptography - RSA, DH & Elliptic Curves.md`
+- Hybrid encryption (asymmetric + AES) → `Security/Asymmetric Cryptography - RSA, DH & Elliptic Curves.md`
+- TLS handshake (1.3), SSL vs TLS, HTTPS → `Security/TLS Handshake & Secure Channels.md`
+- Certificate Authority, chain of trust → `Security/TLS Handshake & Secure Channels.md`
+- MAC (message authentication code), MAC vs signature → `Security/TLS Handshake & Secure Channels.md`
+- Downgrade & MITM attacks, forward secrecy → `Security/TLS Handshake & Secure Channels.md`
 
 ### AI / LLMs
 - Confusion matrix, L1/L2 → `AI-ML/Confusion Matrix, L1, L2.md`

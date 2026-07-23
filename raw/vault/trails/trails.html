@@ -2544,6 +2544,20 @@ S1  S2  S3
   <li>LB continuously pings servers (health checks); unhealthy server removed from rotation</li>
   <li>Can trigger auto-scaling: CPU &gt; 80% → add server; CPU &lt; 20% → remove server</li>
 </ul>
+<h3>Why Not Expose the App Server Directly?</h3>
+<table>
+  <thead><tr><th>Risk</th><th>What goes wrong without an LB</th></tr></thead>
+  <tbody>
+    <tr><td>Single point of failure</td><td>One server, one outage — no failover</td></tr>
+    <tr><td>No health-aware routing</td><td>Dead server stays in traffic path until a human notices</td></tr>
+    <tr><td>Can't scale horizontally</td><td>Stuck with DNS round-robin: slow to propagate, cached by resolvers, health-blind</td></tr>
+    <tr><td>No zero-downtime deploys</td><td>No rotation to drain — every deploy drops live connections</td></tr>
+    <tr><td>Bigger attack surface</td><td>No edge layer to absorb DDoS/SYN floods/slowloris or apply WAF + rate limits</td></tr>
+    <tr><td>Resource exhaustion</td><td>Every raw connection (retries, bots, slow clients) hits the app's thread pool directly</td></tr>
+    <tr><td>Topology exposed</td><td>Server's IP becomes the public contract — can't resize/replace/re-IP freely</td></tr>
+  </tbody>
+</table>
+<div class="warn">The LB is the resilience + security boundary between unpredictable internet traffic and app logic — skip it and every client is coupled directly to one fragile, exposed machine.</div>
 </template>
 
 <template id="node-07-02" data-type="node" data-trail="trail-07" data-order="2"
@@ -3404,7 +3418,7 @@ function Greeting({ name }: Props) {
 <template id="node-11-03" data-type="node" data-trail="trail-11" data-order="3"
   data-title="MongoBleed: A Real-World Exploit"
   data-file="MongoBleed.md"
-  data-bridge="">
+  data-bridge="MongoBleed is a server exploit that leaks secrets straight out of an unencrypted wire protocol. That points at the deeper question every secure channel answers first: how do two parties who have never met agree on a secret over a hostile network, and prove who they are? Asymmetric cryptography &mdash; RSA, Diffie-Hellman, elliptic curves &mdash; is the mathematical foundation.">
 <h3>The Vulnerability</h3>
 <pre>
   CVE-2025-14847: "MongoBleed"
@@ -4273,6 +4287,222 @@ KV per request &asymp; 2 &times; layers &times; kv_heads &times; head_dim &times
   <li><b>MoE wrinkle:</b> DeepSeek V3 (671B total) routes only ~37B active/token &mdash; cheap to compute, but the whole expert table must live in VRAM &rarr; total <i>capacity</i> dominates.</li>
 </ul>
 <div class="good"><b>Whole picture (one line):</b> quantize weights to fit and free room &rarr; fill leftover VRAM with as big a batch as latency allows &rarr; let context length and batch fight over that leftover &rarr; use vLLM to keep the batch saturated &rarr; read it out as $/token. The central knob: bigger batch = cheaper per token, until latency breaks or VRAM runs out.</div>
+</template>
+
+<!-- Security trail (trail-11) continued: cryptography primitives + TLS -->
+<template id="node-11-04" data-type="node" data-trail="trail-11" data-order="4"
+  data-title="Asymmetric Cryptography: RSA, DH &amp; Elliptic Curves"
+  data-file="Security/Asymmetric Cryptography - RSA, DH &amp; Elliptic Curves.md"
+  data-bridge="These are the primitives &mdash; key agreement, encryption, signatures &mdash; but on their own they are just math. TLS is where they get assembled into an actual secure channel: the handshake that runs every time you hit an https:// URL.">
+<h3>The core idea</h3>
+<p>A mathematically linked <b>key pair</b> instead of one shared secret: what one key locks, only the other unlocks. This solves key distribution &mdash; two strangers can talk securely over a public channel without ever having met to swap a secret.</p>
+<div class="compare">
+  <div><h4>Symmetric</h4><pre>ONE shared key
+fast
+but: how do you share
+the key safely?
+intercepted = game over</pre></div>
+  <div><h4>Asymmetric</h4><pre>PUBLIC key (broadcast)
+PRIVATE key (guarded)
+linked, but public can't
+reveal private
+padlock everyone can snap
+shut; only you hold the key</pre></div>
+</div>
+<div class="info"><b>Padlock intuition:</b> your public key is an open padlock you hand out freely. Anyone can lock a box with it (encrypt); only your private key opens it (decrypt). Handing out a thousand padlocks helps no one open a locked one.</div>
+
+<h3>Three security goals (keep them separate)</h3>
+<p>The biggest source of confusion is collapsing these. RSA can do the first two; DH only does the third.</p>
+<table>
+  <thead><tr><th>Goal</th><th>Question</th><th>Term</th></tr></thead>
+  <tbody>
+    <tr><td>Confidentiality</td><td>Can I hide the message from eavesdroppers?</td><td>Encryption</td></tr>
+    <tr><td>Authenticity</td><td>Can I prove who sent it?</td><td>Digital signature</td></tr>
+    <tr><td>Key agreement</td><td>Can two strangers agree a secret without meeting?</td><td>Key exchange</td></tr>
+  </tbody>
+</table>
+
+<h3>RSA &mdash; trapdoor = factoring</h3>
+<p>Multiplying two large primes is trivial; factoring the product back is practically impossible for big enough numbers.</p>
+<pre>
+  p &times; q = n     &larr; easy (milliseconds)
+  n &rarr; p, q      &larr; hard (longer than the age of the universe for 2048-bit n)
+</pre>
+<h4>Key generation (tiny demo numbers)</h4>
+<pre>
+  p = 61, q = 53
+  n = p&times;q = 3233                      (public; in both keys)
+  &phi;(n) = (p-1)(q-1) = 60&times;52 = 3120  (needs p,q &rarr; why private key is safe)
+  e = 17     public exponent, gcd(e,&phi;)=1   (real-world: 65537)
+  d = e&#8315;&sup1; mod &phi;(n) = 2753           private exponent
+
+  Public key  = (n=3233, e=17)
+  Private key = (n=3233, d=2753)
+  p, q, &phi;(n) are DISCARDED &mdash; never stored
+</pre>
+<h4>Encrypt / decrypt</h4>
+<pre>
+  Encrypt (anyone, public key):  c = m^e mod n = 42^17   mod 3233 = 2557
+  Decrypt (only private d):      m = c^d mod n = 2557^2753 mod 3233 = 42
+</pre>
+<p>Works by Euler's theorem: applying <code>e</code> then <code>d</code> is raising to <code>1</code> (since e&times;d &equiv; 1 mod &phi;(n)) &rarr; original <code>m</code> back. Large powers never computed directly &mdash; <b>square-and-multiply</b>, taking mod n at every step (<code>m^17</code>: 17 = 10001&#8322; &rarr; ~5 ops, not 17).</p>
+
+<h3>The key-direction swap (the thing that confuses people)</h3>
+<p>Same operation <code>x^key mod n</code>; <i>which</i> key you apply flips the entire meaning.</p>
+<div class="compare">
+  <div><h4>Encryption (confidentiality)</h4><pre>lock with recipient's PUBLIC key
+&rarr; only their PRIVATE key opens
+"anyone can lock, only they open"</pre></div>
+  <div><h4>Signature (authenticity)</h4><pre>sign with sender's PRIVATE key
+&rarr; anyone's copy of the PUBLIC
+  key verifies
+"only they make it, anyone checks"</pre></div>
+</div>
+<div class="info"><b>Mental model:</b> private key = "only I can do this"; public key = "anyone can do this." Signatures in practice sign the <i>hash</i> of the message: <code>sig = hash(m)^d mod n</code>; verifier re-hashes and checks.</div>
+
+<h3>Diffie-Hellman &mdash; key agreement, NOT encryption</h3>
+<p>Two parties each contribute randomness and independently arrive at the <i>same</i> secret, which neither ever transmits.</p>
+<pre>
+  Public params: prime p, generator g
+  Alice secret a &rarr; sends A = g^a mod p
+  Bob   secret b &rarr; sends B = g^b mod p
+
+  Alice: B^a mod p = g^(ab) mod p
+  Bob:   A^b mod p = g^(ab) mod p
+                    &uarr; same shared secret S, never sent on the wire
+</pre>
+<ul>
+  <li><b>Colour-mixing analogy:</b> both start with a shared public colour, each mixes in a secret colour and swaps the result, then each adds their own secret again &rarr; same final mix. An observer can't un-mix.</li>
+  <li><b>Hard problem = discrete log:</b> given <code>g^a mod p</code>, recover <code>a</code>. Infeasible for large p. (RSA's is factoring; DH's is discrete log.)</li>
+  <li><b>Critical weakness &mdash; no identity:</b> DH proves <i>someone</i> is on the other end, not <i>who</i>. Naked DH is MITM-able &rarr; it always needs a signature layer on top (see TLS).</li>
+</ul>
+
+<h3>DH &ne; RSA</h3>
+<table>
+  <thead><tr><th></th><th>RSA</th><th>Diffie-Hellman</th></tr></thead>
+  <tbody>
+    <tr><td>Job</td><td>Encrypt data; sign messages</td><td>Establish a shared secret</td></tr>
+    <tr><td>Authentication</td><td>Yes (private-key signatures)</td><td>No (needs separate signature layer)</td></tr>
+    <tr><td>Forward secrecy</td><td>No (key pair reused)</td><td>Yes (fresh a, b per session)</td></tr>
+    <tr><td>Hard problem</td><td>Integer factorisation</td><td>Discrete logarithm</td></tr>
+  </tbody>
+</table>
+
+<h3>Elliptic Curve &mdash; just a faster substrate</h3>
+<p>EC is <b>not a new idea</b> &mdash; it's a different mathematical surface to run the same DH/signature ideas on. The prefix names the algorithm; <b>EC = the implementation technique underneath.</b></p>
+<ul>
+  <li><b>ECDH</b> = EC + Diffie-Hellman (same key agreement). <b>ECDSA</b> = EC + DSA (same job as RSA signatures).</li>
+  <li>Why bother: equivalent security with much smaller keys &mdash; <b>~256-bit EC &asymp; 3072-bit RSA</b> &rarr; faster math, less data.</li>
+  <li>Seen in the wild: <b>X25519</b> (key agreement), <b>Ed25519</b> (signatures). Everything modern has moved to EC variants. Guarantees are identical to the non-EC versions; only the number-crunching differs.</li>
+</ul>
+
+<h3>Hybrid encryption (how it's actually used)</h3>
+<p>Asymmetric is never used for the real message body: it's ~1000&times; slower than AES and the message must be shorter than <code>n</code>. So real systems layer them:</p>
+<pre>
+  1. Asymmetric (RSA or ECDH) &rarr; securely establish a small symmetric key (e.g. 256-bit AES)
+  2. Symmetric (AES)          &rarr; encrypt the actual bulk data at full speed
+</pre>
+<div class="info"><b>Connections:</b> <code>JWT.md</code> RS256 signing is RSA in <i>signature</i> mode (server signs with private key, anyone verifies with public) &mdash; the exact "only I make it, anyone checks" direction. The identity-vs-secrecy split recurs everywhere: a signature proves <i>who</i>; encryption/DH provides <i>secrecy</i>; real systems layer both.</div>
+</template>
+
+<template id="node-11-05" data-type="node" data-trail="trail-11" data-order="5"
+  data-title="TLS Handshake &amp; Secure Channels"
+  data-file="Security/TLS Handshake &amp; Secure Channels.md"
+  data-bridge="">
+<h3>What TLS actually is</h3>
+<p>TLS assembles the primitives (ECDH for key agreement, RSA/ECDSA for identity, AES for bulk, MAC for integrity) into one encrypted, authenticated channel. Two phases:</p>
+<ul>
+  <li><b>Handshake</b> &mdash; runs once at connection start: agree a shared secret (ECDH), verify identity (certificate + signature), confirm integrity (Finished MAC).</li>
+  <li><b>Record protocol</b> &mdash; runs continuously after: app data (HTTP) chopped into records, each AES-encrypted and MAC-tagged.</li>
+</ul>
+<pre>
+  HTTP   &larr; application data
+    &boxv;
+  TLS    &larr; encrypts / authenticates it   (this layer)
+    &boxv;
+  TCP    &larr; reliable delivery
+    &boxv;
+  IP     &larr; routing
+</pre>
+<ul>
+  <li><code>HTTPS = HTTP + TLS</code> &mdash; plain HTTP through a TLS channel instead of raw TCP.</li>
+  <li><b>SSL vs TLS:</b> SSL (1990s, Netscape) is TLS's deprecated, broken predecessor. Renamed TLS from 1999; current is TLS 1.2 (2008) and TLS 1.3 (2018). "SSL certificate" / OpenSSL persist culturally &mdash; like calling every vacuum a "Hoover."</li>
+</ul>
+
+<h3>The TLS 1.3 handshake (1 round trip)</h3>
+<pre>
+  Client (browser)                                    Server (bank.com)
+    &boxv; generates ephemeral ECDH key pair               has long-term cert + ECDH key
+    &boxv; &mdash;&mdash; 1. ClientHello (client_pub + ciphers) &mdash;&mdash;&rarr; &boxv;
+    &boxv; &larr;&mdash; 2. ServerHello (server_pub + chosen cipher) &mdash; &boxv;
+    &boxv;                                                        &boxv;
+    &boxv; 3. BOTH derive same shared secret independently:       &boxv;
+    &boxv;    S = ECDH(own_priv, other_pub) &rarr; HKDF &rarr; AES keys   &boxv;
+    &boxv; ==== everything below is AES-encrypted ====            &boxv;
+    &boxv; &larr;&mdash; 4. Certificate (identity, CA-signed) &mdash;&mdash;&mdash;&mdash; &boxv;
+    &boxv; &larr;&mdash; 5. CertificateVerify (signature over transcript) &boxv;
+    &boxv; &larr;&mdash; 6. Finished (MAC over whole handshake) &mdash;&mdash;&mdash; &boxv;
+    &boxv; &mdash;&mdash; 6. Finished (client) &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&rarr; &boxv;
+    &boxv; &mdash;&mdash; 7. GET /account (AES-encrypted) &mdash;&mdash;&mdash;&mdash;&rarr; &boxv;
+</pre>
+<ul>
+  <li><b>Steps 1&ndash;2:</b> both generate a <i>fresh</i> ECDH key pair (typically X25519) just for this connection; exchange public points in the clear; agree a cipher suite.</li>
+  <li><b>Step 3:</b> each multiplies own private scalar by the other's public value &rarr; identical shared secret &rarr; HKDF stretches it into AES keys.</li>
+  <li><b>Steps 4&ndash;5:</b> server sends its CA-signed certificate <i>plus a fresh signature over the entire handshake transcript so far</i> &mdash; the authenticity check.</li>
+  <li><b>Step 6:</b> Finished MAC over the full transcript, both directions &mdash; confirms nothing was tampered with and both sides derived matching keys.</li>
+</ul>
+<div class="info">See it live: <code>openssl s_client -connect google.com:443 -tls1_3</code> &rarr; shows <code>TLS_AES_256_GCM_SHA384</code> (symmetric cipher) and <code>Server Temp Key: X25519</code> (the ephemeral ECDH key &mdash; "Temp" = forward secrecy).</div>
+
+<h3>Certificate Authority &mdash; the chain of trust</h3>
+<p>When bank.com sends its public key, how do you know it's really theirs and not an attacker's? You've never met bank.com &mdash; you need a trusted third party to vouch.</p>
+<pre>
+  CA's trusted root key (built into your browser/OS)
+     &boxur; signs bank.com's certificate
+          &boxur; certificate contains bank.com's public key
+               &boxur; that public key signs the ECDH exchange (CertificateVerify)
+</pre>
+<p>A <b>CA</b> (DigiCert, Let's Encrypt) verifies the requester controls bank.com, then signs a cert binding that domain to its public key. Your browser ships with trusted CA root keys, so it doesn't trust the server blindly.</p>
+
+<h3>MAC &mdash; message authentication code</h3>
+<p>A keyed fingerprint: <code>MAC = hash(secret_key + message)</code>. Proves two things at once &mdash; the message wasn't tampered with, AND it came from someone who knows the shared key. Receiver recomputes and compares; an attacker can't forge one without the key.</p>
+<table>
+  <thead><tr><th></th><th>Digital signature</th><th>MAC</th></tr></thead>
+  <tbody>
+    <tr><td>Key type</td><td>Asymmetric (private signs, public verifies)</td><td>Symmetric (same secret both sides)</td></tr>
+    <tr><td>Who can verify</td><td>Anyone with the public key</td><td>Only someone with the shared key</td></tr>
+    <tr><td>Proves identity to third parties</td><td>Yes</td><td>No (both sides share the key)</td></tr>
+  </tbody>
+</table>
+<p>TLS uses both: signatures (ECDSA/RSA) for the one-time identity proof, MACs for cheap per-message integrity once the shared key exists.</p>
+
+<h3>Attack 1 &mdash; downgrade, and why Finished covers the transcript</h3>
+<p>ClientHello/ServerHello are sent in <b>plaintext, before</b> the certificate is verified &mdash; a vulnerability window.</p>
+<pre>
+  1. Browser: "I support AES-256, AES-128, and (legacy) weak cipher"
+  2. Attacker on wire EDITS it to: "I support only the weak cipher"
+  3. Server picks weak cipher; certificate check STILL PASSES
+     (the cert says nothing about which cipher was chosen)
+  4. Session uses a weak cipher the attacker can break
+</pre>
+<p><b>Fix:</b> the Finished MAC is computed over the <i>entire handshake transcript</i>, every byte including the original ClientHello. If the attacker edited it in transit, the client's and server's transcripts differ &rarr; their Finished MACs differ &rarr; connection aborts. The attacker can't forge a valid MAC (the key came from ECDH, never transmitted).</p>
+<div class="info">The split: <b>CA / CertificateVerify</b> answers "is this really bank.com?" (authenticates the endpoint). The <b>Finished MAC</b> answers "did both sides see the exact same handshake, byte for byte?" (authenticates the conversation). Identity and integrity are separate guarantees; you need both.</div>
+
+<h3>Attack 2 &mdash; MITM with the attacker's own keys, and why it fails</h3>
+<p>Attacker M runs two ECDH exchanges (one with client, one with server), relaying transparently, and forwards the server's certificate. Forwarding the cert is fine &mdash; it's public. The attack dies at <b>CertificateVerify</b>, because that signature covers the transcript, which includes the server's ECDH public key:</p>
+<pre>
+  Server signs a transcript containing:  server's ECDH key
+  Client verifies against its transcript: M's ECDH key      &larr; what client actually saw
+                                          &uarr; mismatch &rarr; signature fails
+</pre>
+<pre>
+  Option A: relay server's real ECDH key &rarr; M can't decrypt (doesn't know that private key)
+  Option B: substitute M's own ECDH key  &rarr; server's signature no longer matches &rarr; client aborts
+</pre>
+<div class="good">To repair the mismatch M would need to forge a signature over its own ECDH key that still verifies against bank.com's certificate &rarr; requires bank.com's <b>certificate private key</b>, which never leaves the server. Copying the public cert grants no power to sign with it. This is why CertificateVerify signs the <i>transcript</i> rather than presenting a static cert &mdash; identity is stapled to <i>this</i> session's key exchange, not a reusable stamp.</div>
+
+<h3>Forward secrecy</h3>
+<p>Both ECDH keys are <b>ephemeral</b> &mdash; fresh per connection, discarded after. Even if bank.com's long-term certificate private key is stolen a year later, past sessions can't be decrypted: their session keys came from private scalars that existed only in memory for one handshake. (TLS 1.2's RSA key-exchange mode lacked this &mdash; one stolen key decrypted every past session; TLS 1.3 removed it.)</p>
+<div class="info"><b>Connections:</b> <code>Networking/What happens when you visit a website.md</code> has the TLS handshake inside the URL-to-page journey; this is the crypto deep dive. Same identity-vs-integrity split as bearer-token / IDOR auth work one level up: a token proves <i>who</i>, but the proof must bind to <i>this</i> request/session or a relay can lift and replay it &mdash; and TLS provides the confidentiality that stops the token being intercepted in transit at all.</div>
 </template>
 
 <script>
