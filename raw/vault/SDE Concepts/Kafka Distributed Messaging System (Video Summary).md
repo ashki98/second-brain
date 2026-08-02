@@ -197,4 +197,174 @@ Two approaches:
 - Research Paper: [https://notes.stephenholiday.com/Kafka.pdf](https://notes.stephenholiday.com/Kafka.pdf)
 - Garbage Collection Details: [https://www.youtube.com/watch?v=ZhbIReLe-r8](https://www.youtube.com/watch?v=ZhbIReLe-r8)
 
+---
+
+## Deep Dive: Partitions, Replication & the Controller
+
+The video's summary above is the gist; this section is the mechanical detail underneath each piece, worked through with real code from `workifi_repos` (`core-be`, `cai`, `notifi`).
+
+### One message → exactly one partition, never all of them
+
+- A message is **never broadcast** to every partition. The producer's partitioner hashes the key and routes to **one** partition, deterministically — same key always lands on the same partition.
+- No key → round-robin across partitions for load balancing, with no ordering guarantee.
+- Ordering only exists **within** a partition. Partition 0 of `orders` and partition 0 of `events` share nothing but a label — different topics' partitions are unrelated logs.
+
+### Broker = leader/follower per partition, not per topic
+
+- **Leader replica**: for each partition, one broker is elected leader — all reads/writes for that partition go through it only.
+- **Follower replica**: passively replicates from the leader.
+- **ISR (in-sync replicas)**: followers fully caught up. `acks=all` only succeeds once every ISR member has the write.
+- **Controller**: one broker elected to detect failures and reassign partition leadership — this is a consensus problem (same territory as DDIA ch. 9).
+- **ZooKeeper → KRaft**: the video's "ZooKeeper + Paxos" description is the old mechanism. Kafka 3.x/4.x replaced this with **KRaft**, Kafka's own Raft-based consensus layer — no external ZooKeeper cluster needed anymore.
+
+### Hardware reality: a broker is basically one EC2/VM
+
+- One broker = one Kafka server process = one compute instance with its own local disk. Confirmed in `core-be/src/core/kafka/config.ts`: `brokers: [settings.kafka.broker1, settings.kafka.broker2]` — two literal host:port machine addresses.
+- Disk matters more than CPU (sequential append-heavy writes; production uses local SSD/NVMe or high-IOPS EBS).
+- Kafka leans on the OS page cache, not JVM heap, for reads (zero-copy `sendfile` — this is exactly the "Zero Copy Messaging" section above, at the OS level).
+- Network is often the real bottleneck: `replicationFactor: 3` means 1 message in ≈ 3x that in cluster-internal replication traffic before it's durable.
+
+### Group coordinator — a role, not a separate service
+
+- One specific broker, chosen by hashing the `group_id` (via which broker leads the relevant `__consumer_offsets` partition).
+- Tracks group membership, receives heartbeats, triggers rebalances. Different consumer groups often land on different coordinators, spreading load across the cluster.
+
+---
+
+## Deep Dive: Where Configuration Actually Lives
+
+The video doesn't cover this, but it's the part that was confusing in practice: **application code never touches partitions directly.** It touches *keys* (producer side) and *group membership* (consumer side). Partition count, replication factor, and topic-level retention are all decided at admin/infra time, separately from the produce/consume code path.
+
+### Topic creation — admin API, not producer/consumer code
+
+```ts
+// core-be/src/api/services/KafkaService.ts
+await kafkaAdmin.createTopics({
+  topics: [{ topic, numPartitions, replicationFactor }],
+});
+```
+
+`producerConfig.allowAutoTopicCreation: false` confirms this is deliberate — a topic that doesn't exist yet won't get silently auto-created with a default 1-partition/1-replica shape from app traffic.
+
+### Producer — key in, no partition number, ever
+
+```ts
+// core-be/src/core/kafka/producer.ts
+await producer.send({ topic, messages: [{ value, key, timestamp }] });
+```
+
+```python
+# cai/common/kafka_utils.py
+future = await producer.send(topic, message, key=key)
+```
+
+`acks` is usually **implicit**, not set directly:
+
+```ts
+// core-be/src/core/kafka/config.ts
+export const producerConfig = {
+  allowAutoTopicCreation: false,
+  idempotent: true,           // forces acks=all internally — Kafka correctness rule
+  maxInFlightRequests: 1,     // caps in-flight requests so retries can't scramble ordering
+  transactionTimeout: 30000,
+};
+```
+
+```python
+# cai/common/kafka_utils.py
+producer = AIOKafkaProducer(
+    bootstrap_servers=KAFKA_BROKERS,
+    compression_type='gzip',
+    enable_idempotence=True,   # same forcing effect
+)
+```
+
+Idempotence only protects **within one connected producer session** — a restart gets a brand-new producer ID, no dedup across restarts. Any message in-flight and unacked at crash time is the application's problem, not Kafka's (see the `Event`/`EventStatus` tracking pattern in `core-be` — that's exactly what fills this gap).
+
+### Consumer — topic + group_id, no partition number, ever
+
+```ts
+// core-be/src/core/kafka/consumer.ts
+await consumer.subscribe({ topic, fromBeginning: false });
+```
+
+```python
+# cai/common/kafka_utils.py
+self.consumer = AIOKafkaConsumer(topic, bootstrap_servers=..., group_id=group_id, ...)
+```
+
+`group_id` factory pattern, shared across services:
+
+```ts
+// notifi/src/core/kafka/index.ts
+const createConsumer = (groupId: string) => {
+    return kafkaConnection.consumer({ groupId });
+};
+```
+
+Each service (`chat-service`, `notifi`, `suggestion-engine`) runs its own `group_id`, so each gets a full independent copy of any topic they all subscribe to — independent groups never compete for partitions with each other.
+
+### Full config map
+
+| Setting | Lives in | Example |
+|---|---|---|
+| `numPartitions`, `replicationFactor` | Admin API, topic creation | `KafkaService.createKafkaTopic` |
+| `retention.ms`, `cleanup.policy` | Admin API, topic config | `KafkaService.updateTopicConfig` |
+| `brokers`, `clientId`, `ssl` | Shared client config | `kafkaConfig` |
+| `idempotent`, `maxInFlightRequests`, `transactionTimeout`, `acks` (implicit) | Producer config | `producerConfig` |
+| `groupId`, `sessionTimeout`, `heartbeatInterval`, `maxBytesPerPartition`, `maxWaitTimeInMs` | Consumer config | `consumerConfig` |
+
+---
+
+## Deep Dive: Consumer Groups, Rebalancing & Offset Tracking
+
+### Rebalancing — the config knobs behind "an in-sync replica is promoted"
+
+The video's failover description is at the partition-leader level; consumer-group rebalancing is a separate mechanism, triggered by:
+
+| Setting | core-be (kafkajs) | cai (aiokafka) | What it does |
+|---|---|---|---|
+| Heartbeat | `heartbeatInterval: 3000` | `heartbeat_interval_ms: 20000` | how often the consumer pings the coordinator |
+| Session timeout | `sessionTimeout: 30000` | `session_timeout_ms: 60000` | no heartbeat within this window → declared dead → rebalance |
+| Max poll interval | — | `max_poll_interval_ms: 300000` | catches a hung processor even while heartbeats keep arriving — a distinct failure mode from a dead connection |
+
+### Consumers > partitions → idle consumers, not more throughput
+
+With 3 partitions and 4 consumers in one group, Kafka can only hand out 3 partition assignments — one consumer gets nothing, sitting as a hot standby. If any of the other 3 dies, a rebalance happens and the idle one picks up that partition instantly. **More consumers than partitions buys faster failover, not more throughput** — for more parallelism, the partition count itself has to go up.
+
+### Offset tracking — producer and consumer are completely different here
+
+- **Consumers track a read position, and Kafka stores it for them.** Every commit writes to the internal `__consumer_offsets` topic, keyed by `(group_id, topic, partition)` — it lives on the broker, not in the pod.
+- **Producers track no position at all.** Each `send()` is independent; the only state carried by an idempotent producer is a broker-assigned producer ID + sequence number, used purely for de-duping retries within one session.
+
+**On restart:**
+- Consumer pod restarts with the same `group_id` → rejoins and resumes exactly from the last committed offset. Pod identity is irrelevant; `group_id` is what matters.
+- Producer pod restarts → no stored position exists to resume from; gets a fresh producer ID; any message lost mid-flight at crash time is on the application to detect (`Event`/`EventStatus` pattern again).
+
+### Real divergence in delivery semantics — core-be vs cai
+
+- **core-be**: default kafkajs behavior — commit *after* processing → at-least-once. Crash mid-processing → redelivered on restart.
+- **cai**: `enable_auto_commit=False`, but commits **immediately on receipt, before processing**:
+  ```python
+  async for msg in self.consumer:
+      await self.consumer.commit()          # committed here
+      self.message_queue.put_nowait(msg)     # processed later, on a separate queue
+  ```
+  This leans at-most-once for the actual processing step — a crash between commit and processing loses that message permanently. Deliberate trade-off: decouples "reading fast" from "processing," favoring consumer-group liveness over guaranteed redelivery (fine for streaming chat events, wrong for billing).
+
+### DLQ pattern — what happens when at-least-once still isn't enough
+
+Retrying a poison message forever in place would stall every message behind it in that partition (ordering is per-partition). `core-be/src/core/kafka/dlq.ts` shunts it sideways instead:
+
+```ts
+const dlqTopic = `${topic}-dlq`;
+await produceMessage(dlqTopic, dlqMessage, message.key?.toString());
+```
+
+### Why offsets are tracked per-partition, not per-topic
+
+There is no "next message in a topic" — ordering only exists within a partition, and each partition has its own independent offset counter starting at 0. Offset 5 of partition 0 and offset 5 of partition 1 are two unrelated messages. The only thing that uniquely identifies "where have I read up to" is `(group_id, topic, partition)` — a topic-level offset is meaningless.
+
+**One-line anchor: a partition is the unit of everything** — ordering, parallelism, and offset tracking all trace back to "each partition is its own independent log."
+
 Kafka: Distributed Messaging System (Video Summary)

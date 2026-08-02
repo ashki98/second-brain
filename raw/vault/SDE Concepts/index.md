@@ -1,7 +1,7 @@
 # SDE Concepts — Index
 
 Claude's quick-reference TOC. Use this to locate notes before reading full files.
-Last updated: 2026-07-01
+Last updated: 2026-07-25
 
 ---
 
@@ -27,7 +27,7 @@ Last updated: 2026-07-01
 | Python and JS based Server concepts.md | WSGI servers (Gunicorn, uWSGI), ASGI servers (Uvicorn), Node.js as runtime, WebSocket vs SSE, framework vs runtime |
 | WSGI and ASGI Deep Dive.md | WSGI callable (environ/start_response), ASGI callable (scope/receive/send), Gunicorn/Uvicorn are Python, dev vs prod servers, production server responsibilities (pre-fork, crash recovery, graceful restart), deployment patterns |
 | Language Nuances.md | Python bytecode/PVM, bytecode vs machine code, __pycache__, PyPy, JIT deep dive (type specialization, deoptimization, warmup), V8 pipeline (Ignition/TurboFan/hidden classes), JS vs Python runtime comparison, frontend frameworks, system VM vs process VM, process VM landscape (JVM/CLR/BEAM/YARV/Zend), CPython compiler vs PVM as separate components, AST as universal compiler tool, compiler frontend vs backend, LLVM IR |
-| OOP Questions.md | 4 pillars, _var/__var/@property, ABC/@abstractmethod, MRO/C3, mixins, duck typing, Protocol, class/static/instance methods, dunders, composition over inheritance |
+| OOP Questions.md | 4 pillars, _var/__var/@property, ABC/@abstractmethod, MRO/C3, mixins, duck typing, Protocol, class/static/instance methods (with use cases: alternate constructors, shared state, pure utilities), dunders, composition over inheritance, Singleton pattern across Python/Java/C++/JS, JVM classloader hierarchy |
 | Packaging in python.md | venv/virtualenv, Poetry, pyproject.toml, lock files, wheel vs sdist |
 | PANDAS_REFERENCE_GUIDE.md | pandas use cases, why over SQL, internal mechanisms (NumPy, SIMD, index hash tables, copy-on-write, groupby, column-oriented, dtype optimisation, Cython), performance numbers, decision framework |
 
@@ -81,6 +81,7 @@ Last updated: 2026-07-01
 | Redis Internals.md | IO multiplexing vs multi-threading, epoll, event loop steps, no locking overhead, exploiting network latency, AOF, TTL, eviction, transactions |
 | Wire Protocols - RESP.md | Why not JSON, RESP types (+/:/$/*/-), bulk string binary safety, prefix length benefit, Redis command wire format |
 | TCP Echo Server Implementation.md | Blocking listener.Accept(), blocking readCommand(), why Client 2 can't connect, motivates IO multiplexing |
+| Redis Streams vs Kafka.md | Stream = one partition not a topic, primitives table, PEL vs offset watermark, XCLAIM/XAUTOCLAIM, message ID format, no auto-rebalancing (self-built janitor), config layers, load-balanced vs broadcast vs broadcast+filter patterns (concerto-pulse/ripples/caasi-citadel) |
 
 ### Scaling/
 | File | Key topics |
@@ -182,7 +183,8 @@ Last updated: 2026-07-01
 - LB vs API Gateway → `Load Balancer vs API Gateway.md`
 - Rate limiting / throttling → `Scaling/API Throttling.md`
 - CDN, CloudFront → `CDN Concepts & AWS CloudFront Developer Flow.md`
-- Kafka messaging → `Kafka Distributed Messaging System (Video Summary).md`
+- Kafka messaging (partitions, replication, ISR, consumer groups, config layers, real workifi_repos code) → `Kafka Distributed Messaging System (Video Summary).md`
+- Redis Streams (PEL, XCLAIM/XAUTOCLAIM, vs Kafka) → `Redis/Redis Streams vs Kafka.md`
 - 1M RPS architecture → `Scaling/Handling 1M Requests.md`
 - Connection pooling, profiling → `Performance Improvement Concepts.md`
 

@@ -813,6 +813,84 @@ behaviour per class</pre></div>
   <li><strong>Protocol</strong> (3.8+): structural subtyping for type checkers; not enforced at runtime</li>
   <li>Prefer <strong>composition</strong> (has-a) over deep inheritance for flexibility</li>
 </ul>
+<h3>Singleton Pattern Across Languages</h3>
+<p>Python modules are singletons already — <code>sys.modules</code> caches a module on first import, so a plain module-level variable is naturally single-instance. Java/C++ need a class-level gatekeeper because they don't cache anything at the class level.</p>
+<div class="compare">
+  <div><h4>Java</h4><pre>private static Database instance;
+private Database() {}
+public static Database getInstance() {
+    if (instance == null)
+        instance = new Database();
+    return instance;
+}</pre></div>
+  <div><h4>C++ (Meyer's Singleton)</h4><pre>static Database&amp; getInstance() {
+    static Database instance;
+    return instance;   // built once,
+}                       // on first call</pre></div>
+</div>
+<h3>JVM Classloader Hierarchy — Why "One Instance" Isn't Always True</h3>
+<pre>
+  Bootstrap classloader
+         |
+  Platform classloader
+         |
+  System / Application classloader
+     |                    |
+  WebApp1 classloader   WebApp2 classloader
+  (own Database.class)  (own Database.class)</pre>
+<div class="warn">Each classloader keeps its own registry of loaded classes — the same class name loaded by two classloaders becomes two distinct <code>Class</code> objects. Tomcat gives each deployed web app its own classloader for isolation (no version conflicts, clean redeploys) — but that means each webapp's <code>Database</code> gets its <strong>own separate static <code>instance</code> field</strong>. The "one instance per JVM" guarantee is really "one instance per classloader."</div>
+<table>
+  <thead><tr><th>Language</th><th>Caches at import/load?</th><th>Needs manual gatekeeping?</th></tr></thead>
+  <tbody>
+    <tr><td>Python</td><td>Yes (<code>sys.modules</code>)</td><td>No — module-level variable</td></tr>
+    <tr><td>JavaScript (ES modules)</td><td>Yes</td><td>No — module-level <code>const</code></td></tr>
+    <tr><td>Java</td><td>No (once per classloader; <code>new</code> still builds fresh)</td><td>Yes — private constructor + static field</td></tr>
+    <tr><td>C++</td><td>No</td><td>Yes — static local variable</td></tr>
+  </tbody>
+</table>
+<div class="info">Per-process caveat: even Python's module-level "singleton" is one <em>per process</em> — <code>uvicorn --workers 4</code> means 4 separate module instances, one per worker.</div>
+<h3>Classmethod and Staticmethod: Use Cases</h3>
+<div class="compare">
+  <div><h4>staticmethod — pure utility</h4><pre>class User:
+    @staticmethod
+    def is_valid_email(email):
+        return "@" in email
+
+User.is_valid_email("a@b.com")
+# no self, no cls needed —
+# just grouped with the class</pre></div>
+  <div><h4>classmethod — alternate constructor</h4><pre>class Pizza:
+    def __init__(self, toppings):
+        self.toppings = toppings
+
+    @classmethod
+    def margherita(cls):
+        return cls(["mozzarella"])
+
+Pizza.margherita()
+# cls() respects subclasses —
+# Stuffed.margherita() returns
+# a Stuffed, not a Pizza</pre></div>
+</div>
+<h4>classmethod for shared class state</h4>
+<pre>
+  class Employee:
+      raise_percentage = 1.05        # shared across ALL instances
+
+      @classmethod
+      def set_raise_percentage(cls, pct):
+          cls.raise_percentage = pct
+
+  Employee.set_raise_percentage(1.10)  # changes it for every employee</pre>
+<table>
+  <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+  <tbody>
+    <tr><td>Needs instance data (<code>self</code>)</td><td>Regular instance method</td></tr>
+    <tr><td>Needs the class itself (<code>cls</code>) — building instances, touching class state</td><td><code>@classmethod</code></td></tr>
+    <tr><td>Needs neither — pure function, just grouped for organization</td><td><code>@staticmethod</code></td></tr>
+  </tbody>
+</table>
+<div class="good">Real-world pattern: <code>Model.objects.filter(...)</code> (Django) and <code>datetime.fromisoformat(...)</code>-style entry points are almost always classmethods under the hood — the alternate-constructor use case above.</div>
 </template>
 
 <template id="node-02-08" data-type="node" data-trail="trail-02" data-order="9"
@@ -2668,7 +2746,7 @@ Edge server in Sydney
 <template id="node-07-05" data-type="node" data-trail="trail-07" data-order="5"
   data-title="Kafka: Distributed Messaging System"
   data-file="Kafka Distributed Messaging System (Video Summary).md"
-  data-bridge="With every scaling layer understood individually, this note assembles them at extreme scale — 1M RPS benchmarks, framework ceilings, the Redis write-behind pattern, and why network cards become the final bottleneck.">
+  data-bridge="Kafka's partition is one independent, ordered log with its own offset counter and its own leader/follower replicas across brokers. Redis Streams borrows the same vocabulary &mdash; but a single stream IS that one log, with no partitioning inside it, and no broker-side coordinator watching consumer liveness for you.">
 <h3>Architecture</h3>
 <pre>
   PRODUCERS → BROKERS (Kafka servers) → CONSUMERS
@@ -2679,14 +2757,21 @@ Edge server in Sydney
                │      └── Partition 1 ───┘
                │    (each partition = ordered, append-only log)
   Messages stored on broker for configurable retention (2+ weeks default).
-  Consumers PULL; track progress via OFFSET.</pre>
+  Consumers PULL; track progress via OFFSET.
+
+  A message is routed to EXACTLY ONE partition (hash of key), never broadcast
+  to all of them. Ordering only exists WITHIN a partition.</pre>
 <h3>Consumer Groups → Exactly-Once</h3>
 <pre>
   Topic "orders", Consumer Group A:
   Partition 0 ──► Consumer 1 (exclusively)
   Partition 1 ──► Consumer 2 (exclusively)
   ONE partition → ONE consumer within a group
-  → prevents duplicate processing ✓</pre>
+  → prevents duplicate processing ✓
+
+  4 consumers, 3 partitions → 1 consumer sits IDLE (hot standby).
+  More consumers than partitions = faster failover, NOT more throughput.
+  More parallelism needs more partitions.</pre>
 <h3>Delivery Guarantees</h3>
 <table>
   <thead><tr><th>Guarantee</th><th>ACK when</th><th>Risk</th></tr></thead>
@@ -2696,16 +2781,75 @@ Edge server in Sydney
     <tr><td>Exactly-once</td><td>Via consumer groups + idempotent producers</td><td>Complex setup</td></tr>
   </tbody>
 </table>
+<div class="compare">
+  <div><h4>core-be (kafkajs)</h4><pre>Default: commit AFTER processing
+→ at-least-once
+Crash mid-processing
+→ redelivered on restart</pre></div>
+  <div><h4>cai (aiokafka)</h4><pre>enable_auto_commit=False
+commit() BEFORE processing:
+  await consumer.commit()
+  queue.put_nowait(msg)
+→ leans at-most-once
+Crash between commit &amp; process
+→ message permanently lost</pre></div>
+</div>
+<div class="info">Deliberate trade-off in <code>cai</code>: decouples fast reading from processing via an internal queue &mdash; optimises for consumer-group liveness over guaranteed redelivery. Fine for streaming chat events, wrong for billing.</div>
 <h3>Performance Optimisations</h3>
 <ul>
   <li><strong>Batching</strong>: producers batch messages (up to 50 KB); consumers batch-fetch. Reduces network round-trips.</li>
-  <li><strong>Zero-copy</strong>: disk → kernel buffer → NIC directly (skips user-space copy). ~2× faster, lower memory, avoids Java GC pressure.</li>
+  <li><strong>Zero-copy</strong>: disk → kernel buffer → NIC directly (skips user-space copy). ~2× faster, lower memory, avoids Java GC pressure. This is the OS-level version of Kafka leaning on page cache instead of JVM heap for reads.</li>
   <li>LinkedIn processes 7 trillion messages per day</li>
   <li>Ordering guaranteed within one partition; not across partitions</li>
 </ul>
+<h3>Replication, Controller &amp; Hardware</h3>
+<pre>
+  Per partition: ONE leader (all reads/writes) + N followers (replicate from leader)
+  ISR (in-sync replicas) = followers fully caught up.
+    acks=all only succeeds once every ISR member has the write.
+  Controller = one broker elected to detect failures + reassign partition leadership.
+  ZooKeeper+Paxos (older) → KRaft (Kafka 3.x/4.x): Kafka's own Raft-based
+    consensus layer, no external ZooKeeper cluster needed.
+
+  A broker is basically ONE EC2/VM running one Kafka process + local disk.
+    brokers: [broker1, broker2]  ← literal host:port machine addresses
+  Disk &gt; CPU (sequential writes); network often the real bottleneck
+    (RF=3 → 1 message in ≈ 3x that in replication traffic).
+
+  Group coordinator = a ROLE one broker plays (chosen by hashing group_id),
+    not a separate service. Tracks membership, heartbeats, triggers rebalances.</pre>
+<h3>Config Layers &mdash; What Application Code Never Touches</h3>
+<pre>
+  Admin API (infra, once):  numPartitions, replicationFactor, retention.ms
+    await kafkaAdmin.createTopics({ topics: [{ topic, numPartitions, replicationFactor }] })
+
+  Producer (key in, NO partition number, ever):
+    await producer.send({ topic, messages: [{ value, key, timestamp }] })
+    acks is usually IMPLICIT: idempotent: true forces acks=all internally
+
+  Consumer (topic + group_id, NO partition number, ever):
+    await consumer.subscribe({ topic, fromBeginning: false })
+    const createConsumer = (groupId) =&gt; kafkaConnection.consumer({ groupId })
+    → each service (chat-service, notifi, suggestion-engine) runs its own
+      group_id → each gets a FULL independent copy of any shared topic.</pre>
+<div class="warn"><strong>Idempotence only protects within one producer session.</strong> A restart gets a brand-new producer ID &mdash; no dedup across restarts. Any in-flight unacked message at crash time is the app's problem (see <code>Event</code>/<code>EventStatus</code> tracking pattern in <code>core-be</code>), not Kafka's.</div>
+<h3>Offsets: Consumer Tracks a Position, Producer Doesn't</h3>
+<pre>
+  CONSUMER restart: same group_id rejoins → reads last committed offset from
+    __consumer_offsets (lives on the BROKER, keyed by group_id+topic+partition)
+    → resumes exactly there. Pod identity is irrelevant; group_id is what matters.
+
+  PRODUCER restart: no stored read position exists → fresh producer ID on
+    reconnect → any in-flight message lost at crash time is on the app to detect.
+
+  WHY per-partition, not per-topic: each partition has its OWN offset counter
+    starting at 0 — offset 5 of partition 0 and offset 5 of partition 1 are
+    unrelated messages. A "topic-level offset" is meaningless.</pre>
+<div class="good"><strong>DLQ pattern</strong> (<code>core-be/src/core/kafka/dlq.ts</code>): a message failing repeatedly gets shunted to <code>{topic}-dlq</code> instead of retried forever in place &mdash; retrying in place would stall every message behind it in that partition, since ordering is per-partition.</div>
+<div class="info"><strong>One-line anchor:</strong> a partition is the unit of everything &mdash; ordering, parallelism, and offset tracking all trace back to "each partition is its own independent log."</div>
 </template>
 
-<template id="node-07-06" data-type="node" data-trail="trail-07" data-order="6"
+<template id="node-07-06" data-type="node" data-trail="trail-07" data-order="7"
   data-title="Handling 1 Million Requests Per Second"
   data-file="Scaling/Handling 1M Requests.md"
   data-bridge="The 1M RPS case study shows the ceiling; this note covers the general toolkit — connection pooling, profiling, caching — for the more common task of improving performance before you hit that ceiling.">
@@ -2756,7 +2900,7 @@ Edge server in Sydney
 </table>
 </template>
 
-<template id="node-07-07" data-type="node" data-trail="trail-07" data-order="7"
+<template id="node-07-07" data-type="node" data-trail="trail-07" data-order="8"
   data-title="Performance Improvement Concepts"
   data-file="Performance Improvement Concepts.md"
   data-bridge="">
@@ -4505,6 +4649,105 @@ shut; only you hold the key</pre></div>
 <h3>Forward secrecy</h3>
 <p>Both ECDH keys are <b>ephemeral</b> &mdash; fresh per connection, discarded after. Even if bank.com's long-term certificate private key is stolen a year later, past sessions can't be decrypted: their session keys came from private scalars that existed only in memory for one handshake. (TLS 1.2's RSA key-exchange mode lacked this &mdash; one stolen key decrypted every past session; TLS 1.3 removed it.)</p>
 <div class="info"><b>Connections:</b> <code>Networking/What happens when you visit a website.md</code> has the TLS handshake inside the URL-to-page journey; this is the crypto deep dive. Same identity-vs-integrity split as bearer-token / IDOR auth work one level up: a token proves <i>who</i>, but the proof must bind to <i>this</i> request/session or a relay can lift and replay it &mdash; and TLS provides the confidentiality that stops the token being intercepted in transit at all.</div>
+</template>
+
+<template id="node-07-08" data-type="node" data-trail="trail-07" data-order="6"
+  data-title="Redis Streams vs Kafka"
+  data-file="Redis/Redis Streams vs Kafka.md"
+  data-bridge="The 1M RPS case study shows the ceiling for a single hot path; this note covers the general toolkit for improving performance before you hit that ceiling.">
+<h3>The Core Mapping: One Stream = One Partition, Not a Topic</h3>
+<pre>
+  Kafka topic  = N independent logs (partitions), auto-split + auto-routed for you
+  Redis Stream = ONE ordered, append-only log. Full stop. No partitioning inside it.
+
+  Want parallelism in Redis? YOU create multiple streams yourself
+  (orders:0, orders:1...) and decide client-side which one a message goes to.
+  Redis will NOT hash a key into a partition the way Kafka's partitioner does.</pre>
+<h3>Primitives, Mapped</h3>
+<table>
+  <thead><tr><th>Redis Streams</th><th>Kafka equivalent</th><th>Key difference</th></tr></thead>
+  <tbody>
+    <tr><td>Stream (<code>XADD</code>)</td><td>Partition (not topic!)</td><td>Single log, no auto-sharding</td></tr>
+    <tr><td>Consumer group (<code>XGROUP CREATE</code>)</td><td>Consumer group</td><td>Same idea &mdash; named, tracks position</td></tr>
+    <tr><td>Message ID (<code>&lt;ms-timestamp&gt;-&lt;seq&gt;</code>)</td><td>Offset</td><td>ID already IS the position (no per-partition split)</td></tr>
+    <tr><td><code>XACK</code></td><td>Offset commit</td><td><strong>Per-message</strong>, not a watermark</td></tr>
+    <tr><td>PEL (pending entries list)</td><td><em>(no equivalent)</em></td><td>Kafka has no per-message in-flight tracking</td></tr>
+    <tr><td><code>XCLAIM</code> / <code>XAUTOCLAIM</code></td><td>Rebalance</td><td><strong>Manual</strong> &mdash; no heartbeat-based liveness</td></tr>
+    <tr><td><code>MAXLEN</code> on <code>XADD</code></td><td>Retention</td><td>Cap-based trim, not usually time-based</td></tr>
+  </tbody>
+</table>
+<div class="info"><strong>Message ID format:</strong> <code>&lt;milliseconds-since-epoch&gt;-&lt;sequence-number&gt;</code>, e.g. <code>1690000000000-0</code>. Sequence increments only if multiple messages land in the same millisecond. <code>XADD stream * field value</code> &mdash; the <code>*</code> auto-assigns this ID.</div>
+<h3>PEL vs. Offset Watermark &mdash; the Structural Difference That Matters Most</h3>
+<p>Kafka tracks one number per (group, topic, partition): "everything up to offset X is done." Crash → redeliver everything after that offset &mdash; coarse but simple. Redis tracks the <strong>PEL</strong>: specific message IDs delivered but not yet acked, each with its own delivery counter.</p>
+<pre>
+  1. Consumer A reads msg-0, msg-2. Consumer B reads msg-1. All enter PEL, delivery=1.
+  2. A finishes, XACKs both → msg-0, msg-2 leave the PEL entirely.
+  3. B crashes before acking msg-1 → stuck in PEL, idle time growing.
+  4. Janitor sweep: msg-1 idle past threshold → XAUTOCLAIM reassigns it,
+     delivery count bumps to 2, reprocessed.
+  5. Keeps failing past MAX_RETRIES (checked via delivery counter) → dropped,
+     not claimed again.</pre>
+<div class="good"><code>concerto-pulse</code> exploits this directly: reads the per-message delivery counter via <code>XPENDING</code> and drops the message once it exceeds <code>MAX_RETRIES</code> &mdash; no separate DLQ topic needed (contrast: <code>core-be</code>'s Kafka <code>dlq.ts</code>), because Redis was already tracking the counter.</div>
+<h3>What XCLAIM / XAUTOCLAIM Actually Are</h3>
+<p><strong>XCLAIM</strong> transfers ownership of a specific, already-delivered-but-unacked message from one consumer to another &mdash; used when a consumer pulled a message, then crashed or hung before <code>XACK</code>. Nobody else touches it by default; Redis still thinks that consumer "has" it. <strong>XAUTOCLAIM</strong> is the lazier version &mdash; scans the whole PEL and claims everything idle past a threshold in one call, instead of supplying exact IDs.</p>
+<pre>
+  async def _janitor_loop(self):
+      """XAUTOCLAIM sweep on every stream every JANITOR_INTERVAL_S.
+      Recovers work from crashed consumers, retries failed deliveries..."""
+
+  Kafka's group coordinator does this automatically (broker-side, free).
+  Redis Streams has NONE of this — you are the coordinator; you write the janitor.</pre>
+<h3>Configuration Layers</h3>
+<pre>
+  Stream + group creation — INLINE at startup, no separate admin step
+  (no partition count to decide):
+    await redis.xgroup_create(name=STREAM, groupname=GROUP, id="0-0", mkstream=True)
+    id="0-0" → from beginning · id="$" → only new messages
+
+  Producer (XADD) — app-level retry, unlike Kafka's client-managed retries:
+    await redis.xadd(stream, fields, maxlen=maxlen, approximate=True)
+
+  Consumer (XREADGROUP) — batch size + block time, XACK always explicit:
+    xreadgroup(group=GROUP, consumer=name, streams={s:">"}, count=BATCH_SIZE, block=BLOCK_MS)
+
+  Janitor (self-built, no Kafka equivalent):
+    min_idle_time, XCLAIM/XAUTOCLAIM, MAX_RETRIES via XPENDING,
+    stale-consumer cleanup via XGROUP DELCONSUMER</pre>
+<div class="warn">No equivalent of Kafka's per-topic <code>numPartitions</code>/<code>replicationFactor</code> &mdash; durability comes from Redis's own instance/cluster replica setup, not per-stream config.</div>
+<h3>Real Patterns &mdash; Two Ends of the Group-Membership Spectrum</h3>
+<div class="compare">
+  <div><h4>Load-balanced — concerto-pulse</h4><pre>CONSUMER_GROUP =
+  "pulse-redis-stream-processors"
+shared across ALL replicas
+→ each message goes to exactly
+  one replica (textbook Kafka
+  consumer-group behavior,
+  self-managed not broker-managed)</pre></div>
+  <div><h4>Broadcast — concerto-ripples</h4><pre>group = f"{PREFIX}-{instance_id}"
+EACH instance gets its OWN group
+→ every instance sees EVERY
+  message (fan-out) — same trick
+  as N separate single-member
+  Kafka consumer groups</pre></div>
+</div>
+<pre>
+  Broadcast + filter — caasi-citadel (also per-instance groups):
+    if target_instance != self.instance_id:
+        await redis.xack(COMMAND_STREAM, group_name, entry_id)
+        return
+
+  Reveals a real limitation: Kafka would let you PARTITION BY the owning
+  instance so each pod only reads what's meant for it. Redis Streams has no
+  key-based routing to a specific consumer/shard — so everyone gets
+  everything and self-filters. Direct consequence of "one stream = one log."</pre>
+<h3>What Genuinely Doesn't Exist in Redis Streams</h3>
+<ul>
+  <li>No brokers-and-controller layer specific to streams &mdash; a stream lives on whichever Redis node/shard owns that key</li>
+  <li>No per-topic replication factor &mdash; whole-instance/cluster deployment concern</li>
+  <li>No automatic consumer failure detection or rebalancing &mdash; the janitor loop is entirely self-built</li>
+  <li>No key-based deterministic routing to a specific consumer/shard &mdash; hence the broadcast-and-filter workaround</li>
+</ul>
+<div class="info"><strong>Ties back to Citadel's own Redis-streams sync design:</strong> sharding per-clinic to preserve ordering is the exact same trade-off as Kafka's per-partition ordering &mdash; shard by key to get ordering within the shard, give up ordering across shards. The PEL/pending-entries idea is the same shape as anything left unacked there: a message picked up but never confirmed needs an explicit "give up and reassign" mechanism, not indefinite retry.</div>
 </template>
 
 <script>
