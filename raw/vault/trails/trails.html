@@ -3133,7 +3133,7 @@ Use this for URL shorteners</pre></div>
 </template>
 
 <!-- Trail 09: DevOps & Infrastructure -->
-<template id="node-09-01" data-type="node" data-trail="trail-09" data-order="1"
+<template id="node-09-01" data-type="node" data-trail="trail-09" data-order="2"
   data-title="Docker: Containers and Registries"
   data-file="Docker Container vs Registry.md"
   data-bridge="Docker gives you the unit of deployment. Jenkins automates what you do with it: a pipeline that builds, tests, and deploys that container on every code change.">
@@ -3182,7 +3182,7 @@ Size: MBs | Boot: seconds ✓</pre></div>
   docker compose down → stops and removes</pre>
 </template>
 
-<template id="node-09-02" data-type="node" data-trail="trail-09" data-order="2"
+<template id="node-09-02" data-type="node" data-trail="trail-09" data-order="3"
   data-title="Jenkins CI/CD Walkthrough"
   data-file="Jenkins &amp; CI CD Walkthrough.md"
   data-bridge="Jenkins is self-hosted and highly configurable. GitHub Actions and GitLab CI/CD bring the same automation as YAML files living alongside the code — the git-native approach most teams use day-to-day.">
@@ -3210,7 +3210,7 @@ Size: MBs | Boot: seconds ✓</pre></div>
 </ul>
 </template>
 
-<template id="node-09-03" data-type="node" data-trail="trail-09" data-order="3"
+<template id="node-09-03" data-type="node" data-trail="trail-09" data-order="4"
   data-title="GitHub and GitLab CI/CD"
   data-file="Github Gitlab CI CD.md"
   data-bridge="CI/CD automates deploying containers; Kubernetes orchestrates them in production — scheduling pods across nodes, health-checking, scaling, and providing service discovery.">
@@ -3245,7 +3245,7 @@ Size: MBs | Boot: seconds ✓</pre></div>
 </table>
 </template>
 
-<template id="node-09-04" data-type="node" data-trail="trail-09" data-order="4"
+<template id="node-09-04" data-type="node" data-trail="trail-09" data-order="5"
   data-title="Kubernetes"
   data-file="Kubernetes.md"
   data-bridge="">
@@ -4748,6 +4748,135 @@ EACH instance gets its OWN group
   <li>No key-based deterministic routing to a specific consumer/shard &mdash; hence the broadcast-and-filter workaround</li>
 </ul>
 <div class="info"><strong>Ties back to Citadel's own Redis-streams sync design:</strong> sharding per-clinic to preserve ordering is the exact same trade-off as Kafka's per-partition ordering &mdash; shard by key to get ordering within the shard, give up ordering across shards. The PEL/pending-entries idea is the same shape as anything left unacked there: a message picked up but never confirmed needs an explicit "give up and reassign" mechanism, not indefinite retry.</div>
+</template>
+
+<template id="node-09-05" data-type="node" data-trail="trail-09" data-order="1"
+  data-title="The Filesystem: Paths, Directories, Inodes, and Links"
+  data-file="The Filesystem is Awesome (Video Summary).md"
+  data-bridge="Every container image layer is really the same underlying trick — a directory entry that can be repointed at a new inode without touching the file's old data. Docker's copy-on-write overlay filesystem industrializes this exact model: shared, read-only layers stacked with hard-link-like sharing until a write forces a private copy.">
+
+<h3>The Big Idea: Three Layers, One Direction</h3>
+<pre>
+ DIRECTORY (a table)        INODE STORE                    DISK
+┌────────────────────┐     ┌───────────────────────┐     ┌───────────────┐
+│ name  →  number     │ →  │ #501: type, size,      │ →  │  raw bytes    │
+│ "zsh" →   501        │    │ owner, mtime,          │    │  (content —   │
+│                     │    │ *pointers to data*     │    │  maybe not    │
+└────────────────────┘     └───────────────────────┘    │  contiguous)  │
+   NAME lives here            METADATA lives here          └───────────────┘
+                                                            CONTENT lives here</pre>
+<ul>
+  <li>A name maps to a number; a number (via the inode) maps to metadata + data — but nothing points back. An inode has no idea what it's named; the data has no idea an inode points at it.</li>
+  <li>This one-way, decoupled structure is the entire reason hard links, symlinks, and cheap renames are possible.</li>
+</ul>
+
+<h3>A Path Is a Route, Not an Address</h3>
+<pre>
+   /            bin            zsh
+[ root dir ] → [ dir inside / ] → [ file inside bin ]</pre>
+<p>A path like <code>/bin/zsh</code> looks like a static coordinate but is actually a set of instructions executed left to right: start at root, step into bin, find zsh. Proof: inserting <code>.</code> (this directory) and <code>..</code> (parent) mid-path still resolves correctly (e.g. <code>/bin/../bin/zsh</code>) — a static address wouldn't tolerate that. Each name, including the dots, is looked up in order from wherever the last step landed; this step-by-step process is called a <strong>walk</strong>. If any intermediate name is invalid, the whole path breaks — even one that would "cancel out" algebraically — proving resolution is sequential, not simplified first.</p>
+<table>
+  <thead><tr><th></th><th>Starts from</th><th>First character</th></tr></thead>
+  <tbody>
+    <tr><td>Absolute path</td><td>root directory (<code>/</code>)</td><td><code>/</code></td></tr>
+    <tr><td>Relative path</td><td>wherever you currently are</td><td>anything else</td></tr>
+  </tbody>
+</table>
+<p>Same underlying walk either way — only the starting point differs.</p>
+
+<h3>What Are We Walking Through? Three Candidate Models</h3>
+<p>A disk has no built-in names or folders — it's just numbered blocks. Something has to translate a path into bytes.</p>
+<table>
+  <thead><tr><th>Model</th><th>Idea</th><th>Why it fails</th></tr></thead>
+  <tbody>
+    <tr><td>Giant flat table</td><td>full path → byte location, one big lookup</td><td>Rename one folder → every file under it stores its full path → hundreds of thousands of rewrites</td></tr>
+    <tr><td>Disk carved as a tree</td><td>give root the whole disk, subdivide per directory</td><td>Must size each region before knowing what goes in it; moving a file becomes a physical byte-copy</td></tr>
+    <tr><td>✓ Chained small tables</td><td>each directory is its own <code>name → number</code> table; directories reference each other, forming a tree</td><td>Rename a folder → exactly one row changes, in one table. Nothing underneath ever recorded its own full path.</td></tr>
+  </tbody>
+</table>
+<div class="good">"A directory doesn't just have a table — it <em>is</em> a table." This is also why the walk must be sequential: no single table can resolve a whole path in one shot, because that information doesn't live in one place.</div>
+
+<h3>Inspecting Directories — ls, Hidden Files, Naming Rules</h3>
+<p><code>ls</code> isn't "listing contents" — it's inspecting the directory-as-table. By default it prints only the name column, and hides two real rows every directory has: <code>.</code> (this directory) and <code>..</code> (parent).</p>
+<pre>
+$ ls -a          (-a = "all")
+.   ..   notes.txt   photo.png</pre>
+<p>Hidden files are a pure display convention — <code>ls</code> hides anything starting with a dot, nothing more. A directory is itself a file (data has to be stored somewhere), so trying to <code>cat</code> a directory fails with a specific, non-confused error:</p>
+<pre>
+$ cat .
+cat: .: Is a directory</pre>
+<ul>
+  <li>Long listing (<code>ls -la</code>) reveals file <strong>type</strong> via the leading character: <code>-</code> regular file, <code>d</code> directory, <code>l</code> symlink.</li>
+  <li>A filename can contain almost anything — spaces, newlines, emojis. Exactly two bytes are forbidden: <code>/</code> (the path separator) and the null byte (marks where a name ends).</li>
+  <li>File extensions aren't real: the <code>.</code> in <code>notes.txt</code> is just another character. <code>.txt</code> means nothing to the filesystem itself — all files are just bytes.</li>
+</ul>
+
+<h3>Inodes — Where Metadata Actually Lives</h3>
+<pre>
+$ ls -li
+16777230  -rw-r--r--  1 ryan staff  27  notes.txt
+   ↑ inode number (the "number" side of name → number)</pre>
+<p>An <strong>inode</strong> holds everything the system knows about a file: size, type, owner, mtime, and pointers to where its content actually sits on disk. <code>stat</code> reveals the metadata but never the raw pointers — those stay internal to the filesystem implementation.</p>
+<div class="info">Recap: the <strong>name</strong> lives in a directory → maps to a <strong>number</strong> → which indexes an <strong>inode</strong> (metadata) → which points at the <strong>data</strong>. Every arrow points one way only.</div>
+
+<h3>Hard Links — One File, Multiple Names</h3>
+<pre>
+$ echo "hello" &gt; a
+$ ln a b                 ← new row: name="b", same inode as "a"
+
+$ ls -li
+16777231  a
+16777231  b              ← identical inode numbers = same file, two names
+
+$ rm a                   ← rm is really "unlink" — removes a name, not the data
+$ cat b
+hello                     ← "b" is completely intact; data never knew "a" existed</pre>
+<p>Every inode has a <strong>link count</strong> tracking how many names point at it. A file is only actually freed once that count hits zero — proof that a file can, in a real sense, live in two places at once.</p>
+
+<h3>Working Directory — Why cd Can't Be a Normal Program</h3>
+<ul>
+  <li>Every ordinary program the shell runs is spawned as a <strong>child process</strong>. A child can change its own working directory, but not its parent's.</li>
+  <li>If <code>cd</code> were a normal program, it would <code>chdir()</code> inside itself, then exit — taking the change with it. The shell's own working directory would never move.</li>
+  <li>So <code>cd</code> must be executed inside the shell process itself, not spawned as a child.</li>
+</ul>
+<div class="warn"><code>pwd -P</code> ("physical") sometimes prints something different from plain <code>pwd</code> — a hint that the directory you're in was reached through a symbolic link.</div>
+
+<h3>Symbolic Links — A File That's Just a Path (as Text)</h3>
+<div class="compare">
+  <div><h4>Hard link</h4><pre>"a" ──┐
+      ├──► inode #501
+"b" ──┘   (SAME data,
+           always in sync)</pre></div>
+  <div><h4>Symbolic link</h4><pre>"Z" (own inode, size=8 bytes)
+content: "/bin/zsh"  ← just text!
+re-read + re-walked
+from scratch every time</pre></div>
+</div>
+<ul>
+  <li><code>ls -l</code> shows a leading <code>l</code> for a symlink's file type.</li>
+  <li>A symlink's size equals the length of its target path string — e.g. 8 bytes for a link pointing at <code>/bin/zsh</code>.</li>
+  <li>Because the target is re-resolved on every walk, two symlinks can point at each other and form a loop: <code>cat</code> on one fails with <em>"too many levels of symbolic links"</em> once the system gives up trying to resolve it.</li>
+</ul>
+
+<h3>The Answer: A File Doesn't Live in One Place</h3>
+<div class="good">Its <strong>name</strong> (possibly several names) is stored across one or more directories. Its <strong>metadata</strong> lives in an inode. Its <strong>content</strong> is stored on disk — and not even necessarily in one contiguous block.</div>
+
+<h3>Command Reference</h3>
+<table>
+  <thead><tr><th>Command</th><th>What it actually does</th></tr></thead>
+  <tbody>
+    <tr><td><code>ls</code> / <code>-a</code> / <code>-l</code> / <code>-i</code></td><td>Reads the directory's name column; <code>-a</code> shows dotfiles; <code>-l</code> shows type/permissions; <code>-i</code> shows the inode number</td></tr>
+    <tr><td><code>cat</code></td><td>Reads file content; fails with "Is a directory" on directories</td></tr>
+    <tr><td><code>stat</code></td><td>Inspects an inode's metadata — not its raw data pointers</td></tr>
+    <tr><td><code>ln A B</code></td><td>Hard link — new name <code>B</code> reusing <code>A</code>'s inode number</td></tr>
+    <tr><td><code>ln -s A B</code></td><td>Symbolic link — new file <code>B</code> whose content is the path <code>A</code></td></tr>
+    <tr><td><code>rm</code></td><td>Actually <code>unlink</code> — removes a name; data survives while link count &gt; 0</td></tr>
+    <tr><td><code>pwd</code> / <code>pwd -P</code></td><td>Working directory; <code>-P</code> resolves through symlinks to the physical path</td></tr>
+    <tr><td><code>cd</code></td><td>Built into the shell itself — a subprocess couldn't change the shell's own working directory</td></tr>
+  </tbody>
+</table>
+<div class="info">Same "avoid touching everything on a single change" reasoning as DDIA's storage-engine trade-offs (Databases &amp; Storage trail) — chained small directory tables localize the cost of a rename the same way B-trees/LSM structures localize the cost of an update. Directly relevant here: Docker's overlay/union filesystem builds container layers out of this exact name→inode→data separation — a copy-on-write layer gives a modified file a new inode while the directory entry above it is simply repointed, the same one-directional-pointer trick as a hard link.</div>
+<p>Left open by the source video (companion piece: "How the Shell Works"): exactly how file content maps onto possibly non-contiguous disk blocks.</p>
 </template>
 
 <script>

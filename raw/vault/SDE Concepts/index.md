@@ -1,7 +1,7 @@
 # SDE Concepts — Index
 
 Claude's quick-reference TOC. Use this to locate notes before reading full files.
-Last updated: 2026-07-25
+Last updated: 2026-09-05
 
 ---
 
@@ -130,6 +130,7 @@ Last updated: 2026-07-25
 | JWT.md | Header.payload.signature structure, Base64 encoding, RS256 signature verification, security pitfalls |
 | Jenkins & CI CD Walkthrough.md | CI vs CD, Jenkins pipeline stages, 6-step setup, Jenkinsfile |
 | Kafka Distributed Messaging System (Video Summary).md | Producer→broker→consumer, topics+partitions, ordering guarantees, consumer groups, at-least/at-most/exactly-once, batching, zero-copy |
+| The Filesystem is Awesome (Video Summary).md | Path resolution as a "walk" not a static address, absolute vs relative, chained directory tables vs flat table vs disk-carved tree, ls/hidden files, directories-are-files, inodes + stat, hard links (rm = unlink, link count), working directory + why cd is shell-builtin, symlinks vs hard links, `.`/`..` as hard links and the link-count formula |
 | Kubernetes.md | Cluster architecture (master+workers), Pod/Service/Ingress/ConfigMap/Secret/Volume/Deployment/StatefulSet, self-healing, etcd |
 | Load Balancer vs API Gateway.md | LB (where to send) vs API Gateway (what to do), architecture patterns (LB+GW, CDN+LB+GW, NLB→GW→ALB) |
 | MVC.md | Model/View/Controller roles, View=JSON in APIs, Service Layer enhancement, framework naming map |
@@ -205,6 +206,7 @@ Last updated: 2026-07-25
 - FastAPI Depends, DI → `FastAPI/FastAPI Dependency Injection (Depends) - Comprehen.md`
 
 ### DevOps
+- Filesystem internals (paths as a walk, directory tables, inodes, hard/symbolic links) → `The Filesystem is Awesome (Video Summary).md`
 - Docker containers → `Docker Container vs Registry.md`
 - Jenkins CI/CD → `Jenkins & CI CD Walkthrough.md`
 - GitHub/GitLab CI/CD, Terraform → `Github Gitlab CI CD.md`
