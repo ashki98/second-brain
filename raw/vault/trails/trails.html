@@ -3514,6 +3514,45 @@ function Greeting({ name }: Props) {
   </ul>
 </div>
 <div class="warn">React's <code>dangerouslySetInnerHTML</code> bypasses auto-escaping — use only with sanitised content.</div>
+
+<h3>CSP Mechanics — Which Response, Inline vs External, unsafe-inline, Nonce</h3>
+<div class="info">Only the response delivering the <strong>HTML document itself</strong> needs the CSP header — the browser reads it once per page load, then enforces that one policy against every later sub-resource request (scripts, styles, images, fetch/XHR) with no header needed on those. Setting CSP on every JSON/API response is unnecessary; gate it on <code>content-type: text/html</code>.</div>
+<div class="compare">
+  <div><h4>External script (React bundle)</h4><pre>&lt;script src="/assets/bundle.js"&gt;&lt;/script&gt;
+Browser fetches separately
+Covered by script-src 'self'
+No special keyword needed</pre></div>
+  <div><h4>Inline script</h4><pre>&lt;script&gt;
+  window.__ENV__={api:"..."}
+&lt;/script&gt;
+Code sits IN the HTML doc
+Structurally = an XSS payload
+Needs unsafe-inline or nonce</pre></div>
+</div>
+<h4>onclick vs React onClick — the nuance</h4>
+<table>
+  <thead><tr><th></th><th>Raw HTML onclick="..."</th><th>React onClick={fn}</th></tr></thead>
+  <tbody>
+    <tr><td>What it is</td><td>JS string inside an HTML attribute</td><td>JSX — not HTML at all</td></tr>
+    <tr><td>Parsed/run by</td><td>Browser's HTML parser</td><td>Compiles to <code>addEventListener()</code> inside bundle.js</td></tr>
+    <tr><td>CSP category</td><td>Inline — needs unsafe-inline</td><td>Lives in an already-trusted external script — never inline</td></tr>
+  </tbody>
+</table>
+<div class="good">A standard React app runs fine under strict CSP (<code>script-src 'self'</code>, no unsafe-inline) — React never writes inline handlers into the HTML; it always wires events via JS running from the bundle.</div>
+<h4>unsafe-inline vs nonce</h4>
+<pre>
+unsafe-inline: script-src 'self' 'unsafe-inline'
+  → trusts ALL inline scripts — can't tell yours from an attacker's ✗
+
+nonce (random, regenerated PER REQUEST):
+  header:  script-src 'self' 'nonce-aB3xZ9...'
+  tag:     &lt;script nonce="aB3xZ9..."&gt;...&lt;/script&gt;
+  → browser runs ONLY the inline script whose nonce matches the header
+  → attacker's injected &lt;script&gt; has no way to know this request's
+    nonce (changes every request) → no nonce attribute → blocked ✓
+</pre>
+<h4>CSP boundary: the DevTools console</h4>
+<div class="warn">CSP governs the PAGE's own code (external/inline scripts, eval). It does NOT govern code a human types or pastes directly into the DevTools console — that's a separate execution surface, not something the page loaded. Even <code>script-src 'none'</code> does nothing here. This is why <strong>self-XSS</strong> works: attackers trick victims into pasting malicious code into their own console (fake "unlock feature" prompts) — no injection vulnerability needed, just social engineering. Browsers warn on first DevTools open for exactly this reason.</div>
 </template>
 
 <template id="node-11-02" data-type="node" data-trail="trail-11" data-order="2"
