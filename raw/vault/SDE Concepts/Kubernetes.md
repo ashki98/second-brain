@@ -50,6 +50,75 @@ A cluster consists of at least one **Master Node** and multiple **Worker Nodes**
     - **MiniKube:** A tool to run a one-node K8s cluster locally for testing [[33:46](http://www.youtube.com/watch?v=s_o8dwzRlu4&t=2026)].
     - **Kubectl:** The Command Line Interface (CLI) to interact with any K8s cluster [[34:25](http://www.youtube.com/watch?v=s_o8dwzRlu4&t=2065)].
 
+### **4a. Deployment & Service YAML — Field by Field**
+
+The course's companion repo ([k8s-in-1-hour](https://gitlab.com/nanuchi/k8s-in-1-hour)) has the actual `mongo.yaml` and `webapp.yaml` walked through in this segment [[21:25](http://www.youtube.com/watch?v=s_o8dwzRlu4&t=1285)]–[[49:09](http://www.youtube.com/watch?v=s_o8dwzRlu4&t=2949)]. Worth having the real fields in front of you:
+
+**Deployment half of `webapp.yaml`:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-deployment
+  labels:
+    app: webapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp        # must match template labels below
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: webapp
+          image: nanajanashia/k8s-demo-app:v1.0
+          ports:
+            - containerPort: 3000
+          env:
+            - name: USER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-user
+```
+- `spec.replicas` — how many Pod copies the Deployment keeps alive.
+- `spec.selector.matchLabels` — the label the Deployment uses to claim its own Pods. Must match `spec.template.metadata.labels` exactly, or the Deployment can't find what it created.
+- `spec.template` — the actual Pod blueprint; everything under it gets stamped onto every replica.
+- `env[].valueFrom.secretKeyRef` / `configMapKeyRef` — pulls a value from a Secret or ConfigMap by name+key at Pod startup instead of hardcoding it. This is the actual mechanism behind the ConfigMap/Secret bullet above.
+
+**Service half of `webapp.yaml`:**
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+spec:
+  type: NodePort
+  selector:
+    app: webapp          # same label, no reference to the Deployment itself
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30000
+```
+- `spec.selector` — the field that actually connects a Service to Pods, and it's just a label match, same as the Deployment used. A Service has no idea what Deployment created a Pod; it only looks at labels.
+- `port` vs `targetPort` — `port` is what other things inside the cluster call the Service on; `targetPort` is the port the container actually listens on inside the Pod. Often the same number, but don't have to be.
+- `nodePort` — only present because `type: NodePort`; the port opened on every Node's IP for external access, matching the External Access note above.
+
+`mongo.yaml`'s Service omits `type` entirely (defaults to `ClusterIP`) and has no `nodePort` — the database is only ever meant to be reached from inside the cluster, matching the Internal/External Service distinction above.
+
+**The one thread tying all three together is label matching, not any direct reference:**
+```mermaid
+graph TD
+    D["Deployment<br/>matchLabels: app=webapp"] -->|creates & owns| RS[ReplicaSet]
+    RS -->|creates from template| P["Pod<br/>label: app=webapp"]
+    S["Service<br/>selector: app=webapp"] -.->|routes to, by label only| P
+```
+A Deployment finds its own Pods by label. A Service finds its target Pods by the same *kind* of label match — done completely independently. Change a Pod's label without updating both the Deployment's `matchLabels` and the Service's `selector`, and either relationship can silently break.
+
 ### **5. Useful Kubectl Commands (Quick Reference)**
 
 - `kubectl apply -f [filename].yaml`: Create or update components [[01:04:55](http://www.youtube.com/watch?v=s_o8dwzRlu4&t=3895)].

@@ -170,6 +170,22 @@
 
 [[Kubernetes]]
 
+[[ECS]]
+
+- AWS Certified Developer
+    
+    [[AWS Certified Developer/03 - Getting Started with AWS|Getting Started with AWS]]
+    
+    [[AWS Certified Developer/05 - EC2 Fundamentals|EC2 Fundamentals]]
+    
+    [[AWS Certified Developer/07 - ELB and ASG|ELB and ASG]]
+    
+    [[AWS Certified Developer/09 - Route 53|Route 53]]
+    
+    [[AWS Certified Developer/10 - VPC Fundamentals|VPC Fundamentals]]
+    
+    [[AWS Certified Developer/16 - Containers, ECS Internals, EKS|Containers, ECS Internals, EKS]]
+    
 - Redis Internals
     
     [[Redis Internals]]

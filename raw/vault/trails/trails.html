@@ -177,6 +177,11 @@
   data-objective="Understand how LLMs work, how to make them domain-specific, and how to build production agent systems."
   data-prereqs="trail-05" data-color="#a855f7" data-review-time="~35 min"></template>
 
+<template id="trail-13" data-type="trail" data-order="13"
+  data-title="AWS Certified Developer Associate"
+  data-objective="Work through the AWS Certified Developer Associate curriculum section by section, matching what's actually configured in the console — not just the concepts."
+  data-prereqs="trail-09" data-color="#f59e0b" data-review-time="~45 min"></template>
+
 <!-- ═══════════════════════════════════════════════════════════════
   NODE TEMPLATES
   Each <template data-type="node"> holds one node's content as HTML.
@@ -3248,7 +3253,7 @@ Size: MBs | Boot: seconds ✓</pre></div>
 <template id="node-09-04" data-type="node" data-trail="trail-09" data-order="5"
   data-title="Kubernetes"
   data-file="Kubernetes.md"
-  data-bridge="">
+  data-bridge="ECS is AWS's own proprietary equivalent to this exact problem — an opaque, AWS-managed control plane instead of Kubernetes' portable, open-source one.">
 <h3>Cluster Architecture</h3>
 <pre>
   ┌─────────────────────────────────────────────────────────────┐
@@ -3287,6 +3292,43 @@ Size: MBs | Boot: seconds ✓</pre></div>
   <li>etcd is the single source of truth for all cluster state — back it up!</li>
   <li>NodePort exposes a Service on a port on every node (30000–32767); Ingress is preferred for production</li>
 </ul>
+</template>
+
+<template id="node-09-05" data-type="node" data-trail="trail-09" data-order="6"
+  data-title="Amazon ECS"
+  data-file="ECS.md"
+  data-bridge="">
+<h3>ECS vs EKS</h3>
+<div class="compare">
+  <div><h4>ECS</h4><pre>Control plane: AWS-managed,
+  opaque, proprietary API
+Compute: Fargate or EC2
+Workload unit: Task
+Manager: ECS Service</pre></div>
+  <div><h4>EKS</h4><pre>Control plane: real K8s
+  (API server, etcd, scheduler)
+Compute: node groups (EC2/Fargate)
+Workload unit: Pod
+Manager: Deployment + Service</pre></div>
+</div>
+<h3>Task, Task Definition, Service</h3>
+<table>
+  <thead><tr><th>Object</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td>Task definition</td><td>Versioned JSON blueprint (family + revision) — never runs anything itself</td></tr>
+    <tr><td>Task</td><td>One running instantiation of a task definition</td></tr>
+    <tr><td>Service</td><td>Keeps N tasks of one revision alive, wires them to a target group, rolls forward on new revisions</td></tr>
+  </tbody>
+</table>
+<div class="info">A task definition doesn't "do" anything until a service (or a one-off <code>run-task</code>) launches from it. The service holds a <strong>pointer</strong> to family+revision, not a copy.</div>
+<div class="good">ECS "Service" ≈ K8s Deployment (mandatory: keep N tasks alive) + K8s Service (optional: wire to a target group), bundled into one object. A task runs fine with <strong>zero</strong> service via <code>run-task</code> — the ECS equivalent of a bare Pod/Job.</div>
+<h3>ASG ↔ Target Group — asymmetric</h3>
+<ul>
+  <li>The <strong>ASG holds a reference</strong> to the target group (under "Load balancing") and pushes <code>RegisterTargets</code>/<code>DeregisterTargets</code> as instances launch/terminate</li>
+  <li>The <strong>target group holds nothing back</strong> — its Targets list is source-agnostic: an ASG, an ECS service (Fargate task ENI), or a manual registration all look identical to it</li>
+  <li>ASG health check type <code>EC2</code> vs <code>ELB</code> decides whether it defers to the target group's own health check when replacing an instance</li>
+</ul>
+<div class="warn">"Fargate vs EC2" and "ECS vs EKS" are independent axes — all four combinations (ECS+EC2, ECS+Fargate, EKS+EC2, EKS+Fargate) exist.</div>
 </template>
 
 <!-- Trail 10: Frontend -->
@@ -4916,6 +4958,137 @@ from scratch every time</pre></div>
 </table>
 <div class="info">Same "avoid touching everything on a single change" reasoning as DDIA's storage-engine trade-offs (Databases &amp; Storage trail) — chained small directory tables localize the cost of a rename the same way B-trees/LSM structures localize the cost of an update. Directly relevant here: Docker's overlay/union filesystem builds container layers out of this exact name→inode→data separation — a copy-on-write layer gives a modified file a new inode while the directory entry above it is simply repointed, the same one-directional-pointer trick as a hard link.</div>
 <p>Left open by the source video (companion piece: "How the Shell Works"): exactly how file content maps onto possibly non-contiguous disk blocks.</p>
+</template>
+
+<!-- Trail 13: AWS Certified Developer Associate -->
+<template id="node-13-01" data-type="node" data-trail="trail-13" data-order="1"
+  data-title="Getting Started with AWS"
+  data-file="AWS Certified Developer/03 - Getting Started with AWS.md"
+  data-bridge="Regions and AZs are the backdrop every other AWS service sits inside — EC2 next.">
+<h3>Global Infrastructure</h3>
+<table>
+  <thead><tr><th>Unit</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td>Region</td><td>Cluster of data centers, mostly independent (own laws, latency, services, pricing)</td></tr>
+    <tr><td>Availability Zone</td><td>1+ discrete data centers inside a region, high-bandwidth/low-latency linked</td></tr>
+    <tr><td>Edge Location</td><td>400+ locations for CloudFront/Global Accelerator to serve content closer to users</td></tr>
+  </tbody>
+</table>
+<div class="info">Most services are region-scoped — you pick a region every time. A handful (IAM, Route 53, CloudFront) are global.</div>
+</template>
+
+<template id="node-13-02" data-type="node" data-trail="trail-13" data-order="2"
+  data-title="EC2 Fundamentals"
+  data-file="AWS Certified Developer/05 - EC2 Fundamentals.md"
+  data-bridge="An EC2 instance sitting alone doesn't scale or survive a zone outage — that's what load balancing and Auto Scaling Groups solve next.">
+<h3>Launch Wizard, in Order</h3>
+<pre>
+  Name/tags → AMI (OS image) → Instance type (t2.micro = free tier)
+    → Key pair (.pem Mac/Linux/Win10+, .ppk PuTTY) → Network settings
+    (security group created HERE, not before) → Storage (8GB gp2,
+    Delete on Termination) → Advanced: User Data → Launch</pre>
+<h3>Security Groups</h3>
+<ul>
+  <li>Firewall <strong>outside</strong> the instance — blocked traffic never reaches it</li>
+  <li>Inbound blocked by default, outbound allowed by default</li>
+  <li>Multiple SGs on one instance = rules <strong>union together</strong>; one SG can attach to many instances</li>
+  <li>Timeout → SG/port issue. Refused → app itself is broken, not a SG problem</li>
+</ul>
+<div class="warn">Public IPv4 can change on stop/start; private IPv4 never does. Don't hardcode the public IP.</div>
+</template>
+
+<template id="node-13-03" data-type="node" data-trail="trail-13" data-order="3"
+  data-title="Elastic Load Balancing &amp; Auto Scaling"
+  data-file="AWS Certified Developer/07 - ELB and ASG.md"
+  data-bridge="With compute now elastic, DNS is what actually gets users to it — Route 53 next.">
+<h3>ALB Target Groups</h3>
+<ul>
+  <li>Targets registered by: an ASG (auto), an ECS service (Fargate task ENI, auto), or manually — the target group can't tell which</li>
+  <li>Health checks are live: stop a registered instance → unhealthy in ~30s → ALB stops sending it traffic immediately</li>
+  <li>Restrict an EC2 instance's own SG to allow traffic <strong>only from the ALB's security group</strong> — not a CIDR — to force all traffic through the LB</li>
+</ul>
+<h3>Auto Scaling Group</h3>
+<table>
+  <thead><tr><th>Field</th><th>Holds</th></tr></thead>
+  <tbody>
+    <tr><td>Launch Template</td><td>AMI, instance type, User Data, SGs, key pair, IAM role, min/max/desired</td></tr>
+    <tr><td>Health check type</td><td>EC2 (status check only) vs ELB (also defers to target-group health)</td></tr>
+    <tr><td>Target tracking policy</td><td>Auto-creates two CloudWatch alarms: AlarmHigh (fast scale-out) + AlarmLow (slow, cautious scale-in)</td></tr>
+  </tbody>
+</table>
+<div class="good">Connection Draining (CLB) = Deregistration Delay (ALB/NLB) — same feature, different name. Default 300s.</div>
+</template>
+
+<template id="node-13-04" data-type="node" data-trail="trail-13" data-order="4"
+  data-title="Route 53 (DNS)"
+  data-file="AWS Certified Developer/09 - Route 53.md"
+  data-bridge="DNS gets a request to the right load balancer; VPC is the private network everything above actually lives inside.">
+<h3>Record Types</h3>
+<table>
+  <thead><tr><th>Type</th><th>Points to</th></tr></thead>
+  <tbody>
+    <tr><td>A / AAAA</td><td>IPv4 / IPv6 address</td></tr>
+    <tr><td>CNAME</td><td>Another hostname — illegal at the zone apex</td></tr>
+    <tr><td>Alias (AWS-only)</td><td>An AWS resource directly — legal at the apex, free, native health check</td></tr>
+  </tbody>
+</table>
+<div class="info">Registering a domain auto-creates its hosted zone with an NS + SOA record — that NS record alone is what makes Route 53 authoritative.</div>
+<h3>Verifying a Record</h3>
+<pre>
+  sudo yum install -y bind-utils      # CloudShell doesn't have these by default
+  dig test.yourdomain.com             # shows TTL + record type in the answer
+  nslookup test.yourdomain.com        # simpler, no TTL shown</pre>
+<div class="warn">Every record needs a TTL <strong>except Alias records</strong>.</div>
+</template>
+
+<template id="node-13-05" data-type="node" data-trail="trail-13" data-order="5"
+  data-title="VPC Fundamentals"
+  data-file="AWS Certified Developer/10 - VPC Fundamentals.md"
+  data-bridge="With the network model in place, the last piece is how AWS actually packages an app as a container instead of a bare EC2 instance.">
+<h3>Building Blocks</h3>
+<div class="compare">
+  <div><h4>NACL</h4><pre>Subnet-level
+ALLOW and DENY rules
+IP addresses only</pre></div>
+  <div><h4>Security Group</h4><pre>Instance/ENI-level
+ALLOW rules only
+IPs or other SGs</pre></div>
+</div>
+<ul>
+  <li>Public subnet → routes to an Internet Gateway. Private subnet → outbound only, via a NAT Gateway/Instance</li>
+  <li>VPC Peering is <strong>not transitive</strong>: A↔B and B↔C does not give A↔C</li>
+  <li>VPC Endpoints reach AWS services over AWS's private network instead of the public internet</li>
+</ul>
+<div class="info">Classic 3-tier pattern: ALB in public subnets → ASG app tier in private subnets → RDS/ElastiCache in an even more isolated data subnet.</div>
+</template>
+
+<template id="node-13-06" data-type="node" data-trail="trail-13" data-order="6"
+  data-title="Containers on AWS: Docker, ECS, EKS"
+  data-file="AWS Certified Developer/16 - Containers, ECS Internals, EKS.md"
+  data-bridge="">
+<h3>The ECS Setup Order</h3>
+<pre>
+  1. Create cluster       → capacity providers appear (FARGATE, FARGATE_SPOT, ASG-backed)
+  2. Register task def    → family + revision, nothing runs yet
+  3. Create service       → POINTS at a task-def revision + the cluster
+                             (this is the "how does task def come into
+                             the picture" answer — a pointer, not a copy)
+  4. Tasks launch          → each task's ENI self-registers into the target group</pre>
+<h3>ECS Service Auto Scaling ≠ EC2 Auto Scaling</h3>
+<table>
+  <thead><tr><th>System</th><th>Changes</th></tr></thead>
+  <tbody>
+    <tr><td>ECS Service Auto Scaling</td><td>Number of <strong>tasks</strong> (CPU/mem or ALB request count)</td></tr>
+    <tr><td>EC2 Auto Scaling (Capacity Provider)</td><td>Number of <strong>EC2 instances</strong> underneath the cluster</td></tr>
+  </tbody>
+</table>
+<div class="good">Fargate skips the EC2 Auto Scaling layer entirely — nothing to size.</div>
+<h3>EKS Node Types</h3>
+<ul>
+  <li><strong>Managed Node Groups</strong> — "nodes are part of an ASG managed by EKS"</li>
+  <li><strong>Self-Managed Nodes</strong> — your own ASG, usually from the EKS-optimized AMI</li>
+  <li><strong>Fargate</strong> — no nodes to think about at all</li>
+</ul>
 </template>
 
 <script>

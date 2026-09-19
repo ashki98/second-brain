@@ -1,7 +1,7 @@
 # SDE Concepts — Index
 
 Claude's quick-reference TOC. Use this to locate notes before reading full files.
-Last updated: 2026-09-05
+Last updated: 2026-09-15
 
 ---
 
@@ -139,6 +139,17 @@ Last updated: 2026-09-05
 | RPC.md | RPC concept (local vs remote), Lambda as RPC, Lambda vs gRPC comparison table |
 | SOLID.md | SRP/OCP/LSP/ISP/DIP using PaymentProcessor example, composition over inheritance |
 | Software Is Changing (Again) by Andrej Karpathy.md | Software 1.0/2.0/3.0, LLMs as utilities/fabs/OS, LLM psychology (superpowers + deficits), 4 properties of LLM apps, vibe coding |
+| ECS.md | ECS vs EKS tradeoffs + vocab mapping, ECS Service = K8s Deployment+Service bundled (task runs fine with no service via run-task), running a service with no load balancer (queue/worker vs Service Discovery vs neither), Fargate as compute-layer choice, ASG↔target-group asymmetry, console setup order, launch-type funnel, one ALB serving many services, real TIFIN examples |
+
+### AWS Certified Developer/
+| File | Key topics |
+|---|---|
+| 03 - Getting Started with AWS.md | Region/AZ/Edge Location definitions, global vs region-scoped services |
+| 05 - EC2 Fundamentals.md | Full launch-wizard walkthrough in order, security group union rule + timeout-vs-refused diagnostic, EC2 User Data, instance type families, AWS Budgets/billing housekeeping |
+| 07 - ELB and ASG.md | ALB vs NLB vs GWLB vs CLB, target group registration (manual/ASG/ECS), live health-check failover, restricting EC2 SG to only the ALB's SG, listener rules (conditions/actions/priority), ASG launch template, ASG↔target-group attachment + EC2-vs-ELB health check type, target-tracking CloudWatch alarms |
+| 09 - Route 53.md | DNS record types, CNAME vs Alias, domain registration walkthrough, hosted zone NS/SOA auto-creation, record creation + dig/nslookup verification |
+| 10 - VPC Fundamentals.md | VPC/subnet/IGW/NAT, NACL vs security group, VPC peering (non-transitive) + endpoints, 3-tier architecture pattern |
+| 16 - Containers, ECS Internals, EKS.md | Docker basics, full ECS setup in console order (cluster → task definition → service → tasks) with exact fields per step, ECS Service Auto Scaling vs EC2 Auto Scaling, rolling-update min/max percent, event-driven ECS patterns, task placement strategies, EKS node types |
 
 ---
 
@@ -211,6 +222,16 @@ Last updated: 2026-09-05
 - Jenkins CI/CD → `Jenkins & CI CD Walkthrough.md`
 - GitHub/GitLab CI/CD, Terraform → `Github Gitlab CI CD.md`
 - Kubernetes architecture → `Kubernetes.md`
+- ECS vs EKS, task/service/target-group mechanics → `ECS.md`
+
+### Cloud / AWS (Certified Developer Associate)
+- Region/AZ/Edge Location → `AWS Certified Developer/03 - Getting Started with AWS.md`
+- EC2 launch wizard, security groups, User Data → `AWS Certified Developer/05 - EC2 Fundamentals.md`
+- ALB/NLB/GWLB, target groups, Auto Scaling Groups → `AWS Certified Developer/07 - ELB and ASG.md`
+- Route 53, DNS records, CNAME vs Alias → `AWS Certified Developer/09 - Route 53.md`
+- VPC, subnets, NACL vs security group, peering → `AWS Certified Developer/10 - VPC Fundamentals.md`
+- Docker, ECS console setup, EKS node types → `AWS Certified Developer/16 - Containers, ECS Internals, EKS.md`
+- ECS vs EKS tradeoffs, ASG↔target-group asymmetry → `ECS.md`
 
 ### Frontend
 - SSG/SSR/Edge/CSR → `Frontend/SSG SSR Edge.md`
